@@ -1,0 +1,12 @@
+mss
+numpy
+opencv-python
+pyautogui
+pydirectinput
+torch
+torchvision
+ultralytics
+gymnasium
+stable-baselines3
+sb3-contrib
+tensorboard

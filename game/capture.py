@@ -4,14 +4,10 @@ import cv2
 import threading
 import time
 
-# --- Config ---
-TARGET_MONITOR = 1          # 1 = primary, 2 = secondary
+TARGET_MONITOR = 1
 TARGET_FPS = 30
 FRAME_INTERVAL = 1.0 / TARGET_FPS
 
-# Optional: crop a sub-region of the monitor (in monitor-relative pixels).
-# Set to None to capture the full monitor.
-# e.g. {"left": 100, "top": 50, "width": 400, "height": 700}
 CROP_REGION = {'left': 655, 'top': 0, 'width': 608, 'height': 1080}
 
 

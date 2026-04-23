@@ -1,73 +1,40 @@
-"""
-Action layer for controlling Clash Royale in BlueStacks.
+import mss
+import pyautogui
 
-Exposes a single function:
-    play(card_slot: int, grid_pos: tuple[int, int])
+from .capture import TARGET_MONITOR, CROP_REGION
 
-where card_slot is 0-3 and grid_pos is (x, y) on the arena tile grid.
-"""
+pyautogui.FAILSAFE = True
+pyautogui.PAUSE = 0
 
-import time
-import pydirectinput
+_CARD_KEYS = ('1', '2', '3', '4')
 
-# --- Calibration (monitor-space pixel coords) ---
+_GRID_BL = (-91, 642)
+_GRID_TR = (315, 382)
+_GRID_COLS = 18
+_GRID_ROWS = 14
 
-# Centers of the 4 card slots in your hand (left to right)
-CARD_SLOTS: list[tuple[int, int]] = [
-    (0, 0),  # slot 0 — TODO calibrate
-    (0, 0),  # slot 1 — TODO calibrate
-    (0, 0),  # slot 2 — TODO calibrate
-    (0, 0),  # slot 3 — TODO calibrate
-]
-
-# Arena bounds (your playable half: top-left and bottom-right in monitor coords)
-ARENA_TOP_LEFT = (0, 0)      # TODO calibrate
-ARENA_BOTTOM_RIGHT = (0, 0)  # TODO calibrate
-
-# Grid dimensions — CR arena is 18 wide x 32 tall total.
-# Your deployable half is bottom 15 rows (enemy side also deployable after tower kill).
-GRID_WIDTH = 18
-GRID_HEIGHT = 32
-
-CLICK_DELAY = 0.05   # between card click and deploy click
-POST_DELAY = 0.1     # after full action
+_TILE_W = (_GRID_TR[0] - _GRID_BL[0]) / _GRID_COLS
+_TILE_H = (_GRID_BL[1] - _GRID_TR[1]) / _GRID_ROWS
 
 
-def grid_to_pixel(gx: int, gy: int) -> tuple[int, int]:
-    """Convert grid coords to monitor pixel coords."""
-    x1, y1 = ARENA_TOP_LEFT
-    x2, y2 = ARENA_BOTTOM_RIGHT
-    tile_w = (x2 - x1) / GRID_WIDTH
-    tile_h = (y2 - y1) / GRID_HEIGHT
-    px = int(x1 + (gx + 0.5) * tile_w)
-    py = int(y1 + (gy + 0.5) * tile_h)
-    return px, py
+def _monitor_offset() -> tuple[int, int]:
+    with mss.mss() as sct:
+        mon = sct.monitors[TARGET_MONITOR]
+        return mon["left"], mon["top"]
 
 
-def play(card_slot: int, grid_pos: tuple[int, int]) -> None:
-    """Play a card at a grid position.
-
-    Args:
-        card_slot: 0-3, which card in your hand
-        grid_pos: (x, y) on the arena grid
-    """
-    if not (0 <= card_slot < 4):
-        raise ValueError(f"card_slot must be 0-3, got {card_slot}")
-
-    card_x, card_y = CARD_SLOTS[card_slot]
-    deploy_x, deploy_y = grid_to_pixel(*grid_pos)
-
-    pydirectinput.click(card_x, card_y)
-    time.sleep(CLICK_DELAY)
-    pydirectinput.click(deploy_x, deploy_y)
-    time.sleep(POST_DELAY)
+_MON_LEFT, _MON_TOP = _monitor_offset()
+_CROP_LEFT = CROP_REGION["left"] if CROP_REGION else 0
+_CROP_TOP = CROP_REGION["top"] if CROP_REGION else 0
 
 
-# --- debug ---
-if __name__ == "__main__":
-    # Dry-run: print what play() would do without clicking
-    for slot in range(4):
-        for pos in [(0, 0), (9, 16), (17, 31)]:
-            cx, cy = CARD_SLOTS[slot]
-            px, py = grid_to_pixel(*pos)
-            print(f"play({slot}, {pos}) -> click({cx},{cy}) then click({px},{py})")
+def tile_to_screen(col: int, row: int) -> tuple[int, int]:
+    fx = _GRID_BL[0] + (col - 0.5) * _TILE_W
+    fy = _GRID_BL[1] - (row - 0.5) * _TILE_H
+    return round(_MON_LEFT + _CROP_LEFT + fx), round(_MON_TOP + _CROP_TOP + fy)
+
+
+def play_card(slot: int, col: int, row: int) -> None:
+    sx, sy = tile_to_screen(col, row)
+    pyautogui.press(_CARD_KEYS[slot])
+    pyautogui.click(sx, sy)

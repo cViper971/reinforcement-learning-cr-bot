@@ -15,12 +15,14 @@ Usage:
 import os
 from dataclasses import dataclass
 import numpy as np
+import torch
 from ultralytics import YOLO
 
 
 @dataclass
 class Detection:
     name: str
+    team: str | None                 # "ally" | "enemy" | None (parsed from class name)
     confidence: float
     bbox: tuple[int, int, int, int]  # (x1, y1, x2, y2)
     center: tuple[int, int]          # (cx, cy) — useful for tile/grid mapping
@@ -28,10 +30,20 @@ class Detection:
     def as_dict(self) -> dict:
         return {
             "name": self.name,
+            "team": self.team,
             "confidence": self.confidence,
             "bbox": self.bbox,
             "center": self.center,
         }
+
+
+def _parse_team(class_name: str) -> str | None:
+    lc = class_name.lower()
+    if "ally" in lc:
+        return "ally"
+    if "enemy" in lc:
+        return "enemy"
+    return None
 
 
 class TroopDetector:
@@ -45,10 +57,16 @@ class TroopDetector:
         if not os.path.exists(weights_path):
             raise FileNotFoundError(f"Model weights not found at {weights_path}")
 
+        if device is None:
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+
         self.model = YOLO(weights_path)
+        self.model.to(device)
         self.conf_threshold = conf_threshold
         self.device = device
         self.class_names: dict[int, str] = self.model.names  # e.g. {0: "Archers", 1: "Giant", ...}
+        print(f"[TroopDetector] device={device}"
+              + (f" ({torch.cuda.get_device_name(0)})" if device == "cuda" else ""))
 
     def detect(self, frame: np.ndarray) -> list[Detection]:
         """Run inference on a BGR frame and return a list of Detections."""
@@ -68,9 +86,11 @@ class TroopDetector:
             conf = float(box.conf[0])
             x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
             cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
+            name = self.class_names.get(cls_id, f"class_{cls_id}")
 
             detections.append(Detection(
-                name=self.class_names.get(cls_id, f"class_{cls_id}"),
+                name=name,
+                team=_parse_team(name),
                 confidence=conf,
                 bbox=(x1, y1, x2, y2),
                 center=(cx, cy),
@@ -104,9 +124,10 @@ if __name__ == "__main__":
         vis = frame.copy()
         for d in detections:
             x1, y1, x2, y2 = d.bbox
-            cv2.rectangle(vis, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            color = (255, 128, 0) if d.team == "ally" else (0, 0, 255) if d.team == "enemy" else (0, 255, 0)
+            cv2.rectangle(vis, (x1, y1), (x2, y2), color, 2)
             cv2.putText(vis, f"{d.name} {d.confidence:.2f}", (x1, y1 - 5),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
 
         cv2.imshow("yolo_debug", vis)
         if cv2.waitKey(1) == 27:
