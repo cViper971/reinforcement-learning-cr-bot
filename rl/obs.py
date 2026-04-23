@@ -18,7 +18,7 @@ Scalar features (in this order):
 """
 import numpy as np
 
-from game.actions import _GRID_BL, _GRID_TR, _GRID_COLS, _GRID_ROWS
+from game_state.actions import _GRID_BL, _GRID_TR, _GRID_COLS, _GRID_ROWS
 from rl.action import CARD_COSTS, card_cost
 
 

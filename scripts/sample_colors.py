@@ -10,7 +10,7 @@ import mss
 import msvcrt
 import numpy as np
 import time
-from game.capture import ScreenCapture, TARGET_MONITOR, CROP_REGION
+from game_state.capture import ScreenCapture, TARGET_MONITOR, CROP_REGION
 
 MONITOR_INDEX = TARGET_MONITOR
 

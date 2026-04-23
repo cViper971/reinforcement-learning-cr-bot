@@ -13,7 +13,7 @@ from typing import NamedTuple
 
 import numpy as np
 
-from game.actions import play_card
+from game_state.actions import play_card
 
 
 NOOP_SLOT = 4
@@ -115,8 +115,8 @@ def build_mask(elixir: int, hand: list[str]) -> dict[str, np.ndarray]:
 if __name__ == "__main__":
     import time
     import cv2
-    from game.capture import ScreenCapture, TARGET_MONITOR, CROP_REGION
-    from game.actions import _GRID_BL, _GRID_TR, _GRID_COLS, _GRID_ROWS
+    from game_state.capture import ScreenCapture, TARGET_MONITOR, CROP_REGION
+    from game_state.actions import _GRID_BL, _GRID_TR, _GRID_COLS, _GRID_ROWS
 
     tile_w = (_GRID_TR[0] - _GRID_BL[0]) / _GRID_COLS
     tile_h = (_GRID_BL[1] - _GRID_TR[1]) / _GRID_ROWS

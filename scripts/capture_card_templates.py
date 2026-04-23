@@ -12,8 +12,8 @@ import time
 import msvcrt
 import cv2
 
-from game.capture import ScreenCapture, TARGET_MONITOR, CROP_REGION
-from game.perception import _CARD_BOXES
+from game_state.capture import ScreenCapture, TARGET_MONITOR, CROP_REGION
+from game_state.perception import _CARD_BOXES
 
 OUT_DIR = os.path.join(os.path.dirname(__file__), "..", "assets", "templates", "cards")
 os.makedirs(OUT_DIR, exist_ok=True)

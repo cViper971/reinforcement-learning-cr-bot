@@ -42,10 +42,11 @@ _ENEMY_HP_HIGH = np.array([180, 200, 255], dtype=np.uint8)
 
 # Load elixir digit templates (0-10)
 _TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), "..", "assets", "templates")
+_ELIXIR_TEMPLATE_DIR = os.path.join(_TEMPLATE_DIR, "elixir")
 _ELIXIR_TEMPLATES: dict[int, np.ndarray] = {}
 
 for i in range(11):
-    path = os.path.join(_TEMPLATE_DIR, f"elixir_{i}.png")
+    path = os.path.join(_ELIXIR_TEMPLATE_DIR, f"elixir_{i}.png")
     if os.path.exists(path):
         _ELIXIR_TEMPLATES[i] = cv2.imread(path)
 

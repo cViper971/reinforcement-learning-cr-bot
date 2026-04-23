@@ -15,9 +15,9 @@ import numpy as np
 import gymnasium as gym
 from gymnasium import spaces
 
-from game.capture import ScreenCapture, TARGET_MONITOR, CROP_REGION
-from game.detector import TroopDetector
-from game.perception import extract_state
+from game_state.capture import ScreenCapture, TARGET_MONITOR, CROP_REGION
+from game_state.detector import TroopDetector
+from game_state.perception import extract_state
 
 from rl.action import (
     Action, N_SLOTS, N_SPOTS, build_mask, decode, execute,
