@@ -10,8 +10,8 @@ _CARD_KEYS = ('1', '2', '3', '4')
 
 _GRID_BL = (-91, 642)
 _GRID_TR = (315, 382)
-_GRID_COLS = 18
-_GRID_ROWS = 14
+_GRID_COLS = 14
+_GRID_ROWS = 29
 
 _TILE_W = (_GRID_TR[0] - _GRID_BL[0]) / _GRID_COLS
 _TILE_H = (_GRID_BL[1] - _GRID_TR[1]) / _GRID_ROWS

@@ -3,6 +3,12 @@ import numpy as np
 import cv2
 import os
 
+from .actions import _GRID_BL, _GRID_TR, _GRID_COLS, _GRID_ROWS
+
+# Grid tile dimensions (pixels)
+_TILE_W_PX = (_GRID_TR[0] - _GRID_BL[0]) / _GRID_COLS
+_TILE_H_PX = (_GRID_BL[1] - _GRID_TR[1]) / _GRID_ROWS
+
 # Elixir number bounding box (frame-relative coords)
 _ELIXIR_NUM_BOX = (153, 1014, 199, 1061)  # x1, y1, x2, y2
 
@@ -194,9 +200,19 @@ def detect_game_state(frame: np.ndarray) -> int:
     return 0
 
 
+def _pixel_to_game_coords(cx: int, cy: int) -> tuple[int, int] | None:
+    """Convert pixel center (cx, cy) to game grid (col, row).
+    Returns None if outside grid bounds."""
+    col = int((cx - _GRID_BL[0]) / _TILE_W_PX)
+    row = int((_GRID_BL[1] - cy) / _TILE_H_PX)
+    if 0 <= col < _GRID_COLS and 0 <= row < _GRID_ROWS:
+        return col, row
+    return None
+
+
 def extract_state(frame: np.ndarray, detector=None) -> dict:
     """Extract game state from a frame. If a TroopDetector is provided,
-    troops (with ally/enemy team from the model's class names) are included under 'troops'."""
+    troops (with ally/enemy team) are included. Troop pixel coords converted to game coords."""
     state = {
         "elixir": detect_elixir(frame),
         "hand": detect_hand(frame),
@@ -205,7 +221,17 @@ def extract_state(frame: np.ndarray, detector=None) -> dict:
     for name in _TOWER_BOXES:
         state[name] = detect_tower_health(frame, name)
     if detector is not None:
-        state["troops"] = [d.as_dict() for d in detector.detect(frame)]
+        troops = []
+        for d in detector.detect(frame):
+            troop_dict = d.as_dict()
+            # Convert pixel center to game coords
+            game_coords = _pixel_to_game_coords(*d.center)
+            if game_coords:
+                col, row = game_coords
+                troop_dict["col"] = col
+                troop_dict["row"] = row
+            troops.append(troop_dict)
+        state["troops"] = troops
     return state
 
 
@@ -240,9 +266,10 @@ if __name__ == "__main__":
                 print(f"  {name}: {state[name]}%")
             print(f"  troops ({len(state['troops'])}):")
             for t in state["troops"]:
-                cx, cy = t["center"]
-                team = t["team"] or "?"
-                print(f"    {team:5s} {t['name']:20s} @ ({cx},{cy})  conf={t['confidence']:.2f}")
+                if "col" in t:
+                    print(f"    {t['team']:5s} {t['name']:20s} @ grid({t['col']},{t['row']})  conf={t['confidence']:.2f}")
+                else:
+                    print(f"    {t['team']:5s} {t['name']:20s} @ out-of-bounds  conf={t['confidence']:.2f}")
             print()
             last_print = now
 

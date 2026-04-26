@@ -22,7 +22,8 @@ from game_state.perception import extract_state
 from rl.action import (
     Action, N_SLOTS, N_SPOTS, build_mask, decode, execute,
 )
-from rl.obs import GRID_ROWS, GRID_COLS, N_CHANNELS, SCALAR_DIM, encode
+import rl.obs as obs_module
+from rl.obs import _set_troop_vocab, encode
 from rl.reward import compute as compute_reward
 
 
@@ -42,15 +43,17 @@ class ClashRoyaleEnv(gym.Env):
         super().__init__()
 
         self.action_space = spaces.MultiDiscrete([N_SLOTS, N_SPOTS])
-        self.observation_space = spaces.Dict({
-            "spatial": spaces.Box(0.0, 1.0, (N_CHANNELS, GRID_ROWS, GRID_COLS), np.float32),
-            "scalar":  spaces.Box(0.0, 1.0, (SCALAR_DIM,),                       np.float32),
-        })
 
         self._cap = ScreenCapture(monitor_index=TARGET_MONITOR, crop=CROP_REGION)
         self._detector = TroopDetector(weights_path, conf_threshold=conf_threshold)
         self._cap.start()
         time.sleep(0.3)
+
+        # Initialize troop vocabulary from detector
+        _set_troop_vocab(self._detector)
+
+        # Create observation space with updated SCALAR_DIM
+        self.observation_space = spaces.Box(0.0, 1.0, (obs_module.SCALAR_DIM,), np.float32)
 
         self._prev_state: dict | None = None
         self._next_step_deadline: float = 0.0

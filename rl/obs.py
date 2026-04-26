@@ -1,99 +1,86 @@
-"""Encode the perception state dict into observation arrays.
-
-Output shape:
-  spatial: (C, GRID_ROWS=14, GRID_COLS=18) float32 in [0, 1]
-  scalar:  (D,)                            float32 in [0, 1]
-
-Channels (4 to start, expand later):
-  0: ally   troop count per cell, normalized by MAX_PER_CELL
-  1: enemy  troop count per cell, normalized by MAX_PER_CELL
-  2: ally   troop "presence" mask (0/1) per cell
-  3: enemy  troop "presence" mask (0/1) per cell
-
-Scalar features (in this order):
-  elixir / 10
-  6 tower HPs / 100  (in TOWER_ORDER)
-  4 hand-card cost / 10
-  4 * len(CARD_VOCAB+1) one-hot for hand cards
-"""
 import numpy as np
+from rl.action import CARD_COSTS
 
-from game_state.actions import _GRID_BL, _GRID_TR, _GRID_COLS, _GRID_ROWS
-from rl.action import CARD_COSTS, card_cost
+MAX_ALLIES  = 10
+MAX_ENEMIES = 10
+GRID_COLS   = 14
+GRID_ROWS   = 29
+N_SECTIONS  = 6  # ally_left/right, bridge_left/right, enemy_left/right
 
-
-GRID_ROWS = _GRID_ROWS  # 14
-GRID_COLS = _GRID_COLS  # 18
-
-_TILE_W_PX = (_GRID_TR[0] - _GRID_BL[0]) / _GRID_COLS
-_TILE_H_PX = (_GRID_BL[1] - _GRID_TR[1]) / _GRID_ROWS
-
-N_CHANNELS = 4
-MAX_PER_CELL = 4.0  # for normalization; >MAX clipped
-
-# Stable card vocabulary order. The +1 slot at the end is for "unknown".
-CARD_VOCAB: list[str] = sorted(CARD_COSTS.keys())
-CARD_VOCAB_SIZE = len(CARD_VOCAB) + 1  # +1 for unknown
-_UNKNOWN_IDX = len(CARD_VOCAB)
-_CARD_TO_IDX = {name: i for i, name in enumerate(CARD_VOCAB)}
+_ALLY_ROW_MAX   = 11   # rows 0-11 = ally zone
+_BRIDGE_ROW_MAX = 16   # rows 12-16 = bridge, 17-28 = enemy
+_MID_COL        = GRID_COLS // 2  # col < 7 = left, >= 7 = right
 
 TOWER_ORDER = [
     "my_left_princess", "my_right_princess", "my_king",
     "enemy_left_princess", "enemy_right_princess", "enemy_king",
 ]
 
-SCALAR_DIM = 1 + len(TOWER_ORDER) + 4 + 4 * CARD_VOCAB_SIZE
+CARD_VOCAB       = sorted(CARD_COSTS.keys())
+CARD_VOCAB_SIZE  = len(CARD_VOCAB)  # always exactly your 8 deck cards
+_CARD_TO_IDX     = {name: i for i, name in enumerate(CARD_VOCAB)}
+
+TROOP_VOCAB      = []
+TROOP_VOCAB_SIZE = 0
+_TROOP_TO_IDX    = {}
+SCALAR_DIM       = 0
 
 
-def _troop_to_cell(cx: int, cy: int) -> tuple[int, int] | None:
-    """Map troop center pixel (in cropped frame) to (col, row) on the 14x18 grid.
-    Returns None if outside grid bounds."""
-    col_f = (cx - _GRID_BL[0]) / _TILE_W_PX
-    row_f = (_GRID_BL[1] - cy) / _TILE_H_PX
-    col = int(col_f)
-    row = int(row_f)
-    if not (0 <= col < GRID_COLS and 0 <= row < GRID_ROWS):
-        return None
-    return col, row
+def _set_troop_vocab(detector) -> None:
+    global TROOP_VOCAB, TROOP_VOCAB_SIZE, _TROOP_TO_IDX, SCALAR_DIM
+    TROOP_VOCAB      = sorted(name.lower() for name in detector.model.names.values())
+    TROOP_VOCAB_SIZE = len(TROOP_VOCAB) + 1
+    _TROOP_TO_IDX    = {name: i for i, name in enumerate(TROOP_VOCAB)}
+    SCALAR_DIM       = (
+        1 + len(TOWER_ORDER) + 4 * CARD_VOCAB_SIZE +
+        MAX_ALLIES  * (CARD_VOCAB_SIZE  + N_SECTIONS) +
+        MAX_ENEMIES * (TROOP_VOCAB_SIZE + N_SECTIONS)
+    )
 
 
-def _spatial(state: dict) -> np.ndarray:
-    out = np.zeros((N_CHANNELS, GRID_ROWS, GRID_COLS), dtype=np.float32)
-    for t in state.get("troops", []):
-        cell = _troop_to_cell(*t["center"])
-        if cell is None:
-            continue
-        col, row = cell
-        if t["team"] == "ally":
-            out[0, row, col] += 1.0
-            out[2, row, col] = 1.0
-        elif t["team"] == "enemy":
-            out[1, row, col] += 1.0
-            out[3, row, col] = 1.0
-    out[0] = np.clip(out[0] / MAX_PER_CELL, 0.0, 1.0)
-    out[1] = np.clip(out[1] / MAX_PER_CELL, 0.0, 1.0)
-    return out
-
-
-def _hand_one_hot(card_name: str) -> np.ndarray:
+def _card_vec(name: str) -> np.ndarray:
     v = np.zeros(CARD_VOCAB_SIZE, dtype=np.float32)
-    v[_CARD_TO_IDX.get(card_name, _UNKNOWN_IDX)] = 1.0
+    idx = _CARD_TO_IDX.get(name.lower())
+    if idx is not None:
+        v[idx] = 1.0
     return v
 
 
-def _scalar(state: dict) -> np.ndarray:
-    parts: list[np.ndarray] = []
-    parts.append(np.array([state["elixir"] / 10.0], dtype=np.float32))
-    parts.append(np.array(
-        [state[t] / 100.0 for t in TOWER_ORDER], dtype=np.float32))
-    hand: list[str] = state["hand"]
-    parts.append(np.array(
-        [card_cost(c) / 10.0 if c != "unknown" else 0.0 for c in hand],
-        dtype=np.float32))
-    for c in hand:
-        parts.append(_hand_one_hot(c))
+def _one_hot(name: str, vocab: list[str], vocab_to_idx: dict) -> np.ndarray:
+    v = np.zeros(len(vocab) + 1, dtype=np.float32)
+    v[vocab_to_idx.get(name.lower(), len(vocab))] = 1.0
+    return v
+
+
+def _to_section(col: int, row: int) -> int:
+    side = 0 if col < _MID_COL else 1
+    zone = 0 if row <= _ALLY_ROW_MAX else (1 if row <= _BRIDGE_ROW_MAX else 2)
+    return zone * 2 + side
+
+
+def _encode_troop_list(troops: list[dict], team: str, max_size: int, name_vec_fn) -> np.ndarray:
+    filtered = sorted(
+        (t for t in troops if t["team"] == team and "col" in t),
+        key=lambda t: t["row"],
+    )
+    name_dim = len(name_vec_fn(""))
+    out = np.zeros((max_size, name_dim + N_SECTIONS), dtype=np.float32)
+    for i, t in enumerate(filtered[:max_size]):
+        sec = np.zeros(N_SECTIONS, dtype=np.float32)
+        sec[_to_section(t["col"], t["row"])] = 1.0
+        out[i] = np.concatenate([name_vec_fn(t["name"]), sec])
+    return out
+
+
+def encode(state: dict) -> np.ndarray:
+    troops = state.get("troops", [])
+    ally_name  = _card_vec
+    enemy_name = lambda n: _one_hot(n, TROOP_VOCAB, _TROOP_TO_IDX)
+    parts = [
+        np.array([state["elixir"] / 10.0], dtype=np.float32),
+        np.array([state[t] / 100.0 for t in TOWER_ORDER], dtype=np.float32),
+        *[_card_vec(card) for card in state["hand"]],
+        _encode_troop_list(troops, "ally",  MAX_ALLIES,  ally_name).flatten(),
+        _encode_troop_list(troops, "enemy", MAX_ENEMIES, enemy_name).flatten(),
+    ]
     return np.concatenate(parts)
-
-
-def encode(state: dict) -> dict[str, np.ndarray]:
-    return {"spatial": _spatial(state), "scalar": _scalar(state)}
