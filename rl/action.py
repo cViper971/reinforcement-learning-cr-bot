@@ -26,23 +26,24 @@ class Spot:
     region: str  # my_back | my_mid | my_bridge | enemy_bridge | enemy_lane | enemy_back
 
 
-# Coords are starting estimates on the 18x14 grid from game/actions.py.
-# Calibrate with the debug overlay (`python -m rl.action`) before training.
+# Coords on the 18x29 grid from game_wrapper/actions.py.
+# Rows roughly: 0-2 my king, 2-5 my princess line, 5-13 my placement zone,
+# 13-15 bridge/river, 15-23 enemy placement zone, 24-26 enemy princess line, 26-28 enemy king.
 SPOTS: list[Spot] = [
-    Spot("behind_my_king",            8,  1, "my_back"),
-    Spot("behind_my_left_princess",   3,  1, "my_back"),
-    Spot("behind_my_right_princess", 14,  1, "my_back"),
-    Spot("front_my_king",             8,  4, "my_mid"),
-    Spot("front_my_left_princess",    3,  4, "my_mid"),
-    Spot("front_my_right_princess",  14,  4, "my_mid"),
-    Spot("my_bridge_left",            3,  6, "my_bridge"),
-    Spot("my_bridge_right",          14,  6, "my_bridge"),
-    Spot("enemy_bridge_left",         3,  8, "enemy_bridge"),
-    Spot("enemy_bridge_right",       14,  8, "enemy_bridge"),
-    Spot("enemy_left_princess",       3, 10, "enemy_lane"),
-    Spot("enemy_right_princess",     14, 10, "enemy_lane"),
-    Spot("enemy_left_kite",           1, 11, "enemy_back"),
-    Spot("enemy_right_kite",         16, 11, "enemy_back"),
+    Spot("front_my_king",             9,  8, "my_mid"),
+    # Spot("behind_my_king",            9,  2, "my_back"),
+    # Spot("behind_my_left_princess",   3,  2, "my_back"),
+    # Spot("behind_my_right_princess", 14,  2, "my_back"),
+    # Spot("front_my_left_princess",    3,  8, "my_mid"),
+    # Spot("front_my_right_princess",  14,  8, "my_mid"),
+    # Spot("my_bridge_left",            3, 12, "my_bridge"),
+    # Spot("my_bridge_right",          14, 12, "my_bridge"),
+    # Spot("enemy_bridge_left",         3, 16, "enemy_bridge"),
+    # Spot("enemy_bridge_right",       14, 16, "enemy_bridge"),
+    # Spot("enemy_left_princess",       3, 21, "enemy_lane"),
+    # Spot("enemy_right_princess",     14, 21, "enemy_lane"),
+    # Spot("enemy_left_kite",           1, 23, "enemy_back"),
+    # Spot("enemy_right_kite",         16, 23, "enemy_back"),
 ]
 N_SPOTS = len(SPOTS)
 
@@ -122,8 +123,8 @@ if __name__ == "__main__":
     def spot_to_frame_xy(spot: Spot) -> tuple[int, int]:
         # Inverse of game/actions.tile_to_screen, dropping the monitor offset
         # so we get coords in the cropped frame's space.
-        fx = _GRID_BL[0] + (spot.col - 0.5) * tile_w
-        fy = _GRID_BL[1] - (spot.row - 0.5) * tile_h
+        fx = _GRID_BL[0] + (spot.col + 0.5) * tile_w
+        fy = _GRID_BL[1] - (spot.row + 0.5) * tile_h
         return round(fx), round(fy)
 
     cap = ScreenCapture(monitor_index=TARGET_MONITOR, crop=CROP_REGION)

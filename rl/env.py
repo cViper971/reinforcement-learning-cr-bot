@@ -7,6 +7,7 @@ in Phase 3 once GameWrapper.reset_match() is filled in.
 Step rate: 2 Hz (500 ms boundaries). Each step: optionally place a card,
 sleep until next boundary, capture, perceive, compute reward.
 """
+import ctypes
 import time
 from typing import Any
 
@@ -14,10 +15,15 @@ import numpy as np
 import gymnasium as gym
 from gymnasium import spaces
 
+
+def _q_pressed() -> bool:
+    """Global Q-key check (works even when BlueStacks has focus)."""
+    return bool(ctypes.windll.user32.GetAsyncKeyState(ord('Q')) & 0x8000)
+
 from game_wrapper import GameWrapper, DEFAULT_WEIGHTS
 
 from rl.action import (
-    Action, N_SLOTS, N_SPOTS, build_mask, decode, execute,
+    Action, N_SLOTS, N_SPOTS, SPOTS, build_mask, decode, execute,
 )
 import rl.obs as obs_module
 from rl.obs import _set_troop_vocab, encode
@@ -51,16 +57,17 @@ class ClashRoyaleEnv(gym.Env):
 
     # --- gym API ---
 
-    def reset(self, *, seed: int | None = None, options: dict | None = None
-              ) -> tuple[dict, dict]:
+    def reset(self, *, seed: int | None = None, options: dict | None = None) -> tuple[dict, dict]:
         super().reset(seed=seed)
 
         # Phase 1: wait for human to queue a match. Poll until we see N
         # consecutive running-state frames.
-        print("[env] waiting for match start (queue manually)... ESC not handled, Ctrl+C to abort")
+        print("[env] waiting for match start (queue manually)... press Q to kill, Ctrl+C to abort")
         running_streak = 0
         last_print = 0.0
         while running_streak < RESET_STABLE_FRAMES:
+            if _q_pressed():
+                raise KeyboardInterrupt("Q pressed during reset")
             state = self._game.get_state()
             if state["game_state"] == 0:
                 running_streak += 1
@@ -79,8 +86,7 @@ class ClashRoyaleEnv(gym.Env):
         print("[env] match running, episode begin")
         return obs, info
 
-    def step(self, action_array: np.ndarray
-             ) -> tuple[dict, float, bool, bool, dict]:
+    def step(self, action_array: np.ndarray) -> tuple[dict, float, bool, bool, dict]:
         action = decode(action_array)
 
         # Validate against current mask. If invalid, treat as no-op rather than
@@ -88,6 +94,11 @@ class ClashRoyaleEnv(gym.Env):
         if not action.is_noop:
             mask = build_mask(self._prev_state["elixir"], self._prev_state["hand"])
             if mask["slot"][action.slot]:
+                dt_since_last = time.perf_counter() - getattr(self, "_last_play_t", 0.0)
+                print(f"[{time.strftime('%H:%M:%S')} +{dt_since_last:.2f}s] "
+                      f"played {self._prev_state['hand'][action.slot]} at {SPOTS[action.spot_idx].name}",
+                      flush=True)
+                self._last_play_t = time.perf_counter()
                 execute(action, self._game)
 
         # Sleep to next 500ms boundary
@@ -127,8 +138,12 @@ if __name__ == "__main__":
     steps = 0
     t0 = time.time()
     try:
+        print("[env] press Q at any time to kill the bot")
         done = False
         while not done:
+            if _q_pressed():
+                print("[env] Q pressed — killing bot")
+                break
             mask = info["action_mask"]
             # Sample respecting per-component mask (so random play is at least
             # affordable — otherwise nothing ever gets placed early in a match).
@@ -139,10 +154,6 @@ if __name__ == "__main__":
             total_r += reward
             steps += 1
             done = terminated or truncated
-            if reward != 0.0 or steps % 20 == 0:
-                raw = info["raw"]
-                print(f"step={steps:4d}  slot={slot} spot={spot:2d}  r={reward:+.3f}  "
-                      f"sum={total_r:+.3f}  elixir={raw['elixir']}  game_state={raw['game_state']}")
     finally:
         dt = time.time() - t0
         print(f"\n[done] steps={steps} total_reward={total_r:+.3f} "

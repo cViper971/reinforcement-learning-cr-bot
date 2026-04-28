@@ -3,7 +3,7 @@ import msvcrt
 import ctypes
 import time
 
-from game_state.capture import TARGET_MONITOR, CROP_REGION
+from game_wrapper.capture import TARGET_MONITOR, CROP_REGION
 
 with mss.mss() as sct:
     mon = sct.monitors[TARGET_MONITOR]
