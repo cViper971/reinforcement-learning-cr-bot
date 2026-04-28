@@ -8,6 +8,7 @@ Step rate: 2 Hz (500 ms boundaries). Each step: optionally place a card,
 sleep until next boundary, capture, perceive, compute reward.
 """
 import ctypes
+import threading
 import time
 from typing import Any
 
@@ -16,14 +17,26 @@ import gymnasium as gym
 from gymnasium import spaces
 
 
-def _q_pressed() -> bool:
-    """Global Q-key check (works even when BlueStacks has focus)."""
-    return bool(ctypes.windll.user32.GetAsyncKeyState(ord('Q')) & 0x8000)
+_kill = threading.Event()
+
+
+def _kill_watcher() -> None:
+    """Background thread that sets _kill the moment Q is pressed.
+    Uses GetAsyncKeyState so it works globally (BlueStacks can have focus)."""
+    while not _kill.is_set():
+        if ctypes.windll.user32.GetAsyncKeyState(ord('Q')) & 0x8000:
+            print("\n[env] Q pressed — killing bot")
+            _kill.set()
+            return
+        time.sleep(0.03)
+
+
+threading.Thread(target=_kill_watcher, daemon=True).start()
 
 from game_wrapper import GameWrapper, DEFAULT_WEIGHTS
 
 from rl.action import (
-    Action, N_SLOTS, N_SPOTS, SPOTS, build_mask, decode, execute,
+    Action, N_SLOTS, N_SPOTS, SPOTS, build_mask, card_cost, decode, execute,
 )
 import rl.obs as obs_module
 from rl.obs import _set_troop_vocab, encode
@@ -66,7 +79,7 @@ class ClashRoyaleEnv(gym.Env):
         running_streak = 0
         last_print = 0.0
         while running_streak < RESET_STABLE_FRAMES:
-            if _q_pressed():
+            if _kill.is_set():
                 raise KeyboardInterrupt("Q pressed during reset")
             state = self._game.get_state()
             if state["game_state"] == 0:
@@ -94,11 +107,16 @@ class ClashRoyaleEnv(gym.Env):
         if not action.is_noop:
             mask = build_mask(self._prev_state["elixir"], self._prev_state["hand"])
             if mask["slot"][action.slot]:
-                dt_since_last = time.perf_counter() - getattr(self, "_last_play_t", 0.0)
-                print(f"[{time.strftime('%H:%M:%S')} +{dt_since_last:.2f}s] "
-                      f"played {self._prev_state['hand'][action.slot]} at {SPOTS[action.spot_idx].name}",
+                now_pc = time.perf_counter()
+                last_pc = getattr(self, "_last_play_t", None)
+                dt_since_last = (now_pc - last_pc) if last_pc is not None else 0.0
+                card = self._prev_state['hand'][action.slot]
+                ts = time.strftime('%H:%M:%S') + f".{int(time.time() * 1000) % 1000:03d}"
+                print(f"[{ts} +{dt_since_last:.3f}s] "
+                      f"played {card} (cost {card_cost(card)}) at {SPOTS[action.spot_idx].name} "
+                      f"| elixir={self._prev_state['elixir']}",
                       flush=True)
-                self._last_play_t = time.perf_counter()
+                self._last_play_t = now_pc
                 execute(action, self._game)
 
         # Sleep to next 500ms boundary
@@ -109,6 +127,8 @@ class ClashRoyaleEnv(gym.Env):
         self._next_step_deadline += STEP_DT
 
         state = self._game.get_state()
+        ts = time.strftime('%H:%M:%S') + f".{int(time.time() * 1000) % 1000:03d}"
+        print(f"[{ts}] elixir={state['elixir']} hand={state['hand']}", flush=True)
         reward = compute_reward(self._prev_state, state)
         terminated = state["game_state"] != 0
         truncated = False
@@ -141,8 +161,7 @@ if __name__ == "__main__":
         print("[env] press Q at any time to kill the bot")
         done = False
         while not done:
-            if _q_pressed():
-                print("[env] Q pressed — killing bot")
+            if _kill.is_set():
                 break
             mask = info["action_mask"]
             # Sample respecting per-component mask (so random play is at least

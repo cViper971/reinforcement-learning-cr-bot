@@ -23,27 +23,19 @@ class Spot:
     name: str
     col: int
     row: int
-    region: str  # my_back | my_mid | my_bridge | enemy_bridge | enemy_lane | enemy_back
 
 
-# Coords on the 18x29 grid from game_wrapper/actions.py.
-# Rows roughly: 0-2 my king, 2-5 my princess line, 5-13 my placement zone,
-# 13-15 bridge/river, 15-23 enemy placement zone, 24-26 enemy princess line, 26-28 enemy king.
+# Coords on the my-side action grid (1-indexed, (1,1) = bottom-left).
+# Calibrate with the debug overlay (`python -m rl.action`) before training.
 SPOTS: list[Spot] = [
-    Spot("front_my_king",             9,  8, "my_mid"),
-    # Spot("behind_my_king",            9,  2, "my_back"),
-    # Spot("behind_my_left_princess",   3,  2, "my_back"),
-    # Spot("behind_my_right_princess", 14,  2, "my_back"),
-    # Spot("front_my_left_princess",    3,  8, "my_mid"),
-    # Spot("front_my_right_princess",  14,  8, "my_mid"),
-    # Spot("my_bridge_left",            3, 12, "my_bridge"),
-    # Spot("my_bridge_right",          14, 12, "my_bridge"),
-    # Spot("enemy_bridge_left",         3, 16, "enemy_bridge"),
-    # Spot("enemy_bridge_right",       14, 16, "enemy_bridge"),
-    # Spot("enemy_left_princess",       3, 21, "enemy_lane"),
-    # Spot("enemy_right_princess",     14, 21, "enemy_lane"),
-    # Spot("enemy_left_kite",           1, 23, "enemy_back"),
-    # Spot("enemy_right_kite",         16, 23, "enemy_back"),
+    Spot("left_bridge",     4, 14),
+    Spot("right_bridge",   15, 14),
+    Spot("left_mid",        9,  10),
+    Spot("right_mid",      10,  10),
+    Spot("left_princess",   4,  8),
+    Spot("right_princess", 15,  8),
+    Spot("left_back",       9, 0),
+    Spot("right_back",     10, 0),
 ]
 N_SPOTS = len(SPOTS)
 
@@ -121,10 +113,10 @@ if __name__ == "__main__":
     tile_h = (_GRID_BL[1] - _GRID_TR[1]) / _GRID_ROWS
 
     def spot_to_frame_xy(spot: Spot) -> tuple[int, int]:
-        # Inverse of game/actions.tile_to_screen, dropping the monitor offset
-        # so we get coords in the cropped frame's space.
-        fx = _GRID_BL[0] + (spot.col + 0.5) * tile_w
-        fy = _GRID_BL[1] - (spot.row + 0.5) * tile_h
+        # Inverse of game_wrapper.actions.tile_to_screen, dropping the monitor
+        # offset so we get coords in the cropped frame's space.
+        fx = _GRID_BL[0] + (spot.col - 0.5) * tile_w
+        fy = _GRID_BL[1] - (spot.row - 0.5) * tile_h
         return round(fx), round(fy)
 
     cap = ScreenCapture(monitor_index=TARGET_MONITOR, crop=CROP_REGION)
@@ -132,15 +124,6 @@ if __name__ == "__main__":
     time.sleep(0.3)
 
     cv2.namedWindow("spot_overlay", cv2.WINDOW_NORMAL)
-
-    region_colors = {
-        "my_back":      (255, 200,   0),
-        "my_mid":       (255, 255, 100),
-        "my_bridge":    (  0, 255, 255),
-        "enemy_bridge": (  0, 200, 255),
-        "enemy_lane":   (  0, 100, 255),
-        "enemy_back":   (  0,   0, 255),
-    }
 
     print(f"{N_SPOTS} spots loaded. ESC to quit.")
     while True:
@@ -151,7 +134,7 @@ if __name__ == "__main__":
         vis = frame.copy()
         for i, spot in enumerate(SPOTS):
             x, y = spot_to_frame_xy(spot)
-            color = region_colors.get(spot.region, (255, 255, 255))
+            color = (0, 255, 255)
             cv2.circle(vis, (x, y), 8, color, 2)
             cv2.putText(vis, f"{i}:{spot.name}", (x + 10, y + 4),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.4, color, 1)

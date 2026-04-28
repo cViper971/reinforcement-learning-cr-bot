@@ -3,7 +3,10 @@ import numpy as np
 import cv2
 import os
 
-from .actions import _GRID_BL, _GRID_TR, _GRID_COLS, _GRID_ROWS
+_GRID_BL = (48, 804)
+_GRID_TR = (558, 104)
+_GRID_COLS = 18
+_GRID_ROWS = 29
 
 # Grid tile dimensions (pixels)
 _TILE_W_PX = (_GRID_TR[0] - _GRID_BL[0]) / _GRID_COLS
@@ -56,14 +59,17 @@ for i in range(11):
     if os.path.exists(path):
         _ELIXIR_TEMPLATES[i] = cv2.imread(path)
 
-# Load card templates — filename (without .png) = card name
+# Load card templates — filename (without .png) = card name. Stored as
+# grayscale so matching is invariant to the desaturated "not enough elixir"
+# look (cards render black-and-white when uncastable).
 _CARD_TEMPLATE_DIR = os.path.join(_TEMPLATE_DIR, "cards")
 _CARD_TEMPLATES: dict[str, np.ndarray] = {}
 
 if os.path.isdir(_CARD_TEMPLATE_DIR):
     for path in glob.glob(os.path.join(_CARD_TEMPLATE_DIR, "*.png")):
         name = os.path.splitext(os.path.basename(path))[0]
-        _CARD_TEMPLATES[name] = cv2.imread(path)
+        bgr = cv2.imread(path)
+        _CARD_TEMPLATES[name] = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
 
 # Load endgame banner templates — expects victory.png and defeat.png
 _ENDGAME_TEMPLATE_DIR = os.path.join(_TEMPLATE_DIR, "endgame")
@@ -76,7 +82,7 @@ if os.path.isdir(_ENDGAME_TEMPLATE_DIR):
 
 
 _ELIXIR_CONFIDENCE_THRESHOLD = 0.8
-_CARD_CONFIDENCE_THRESHOLD = 0.7
+_CARD_CONFIDENCE_THRESHOLD = 0.4
 _ENDGAME_CONFIDENCE_THRESHOLD = 0.7
 _last_elixir = 0
 _last_hand: list[str] = ["unknown"] * 4
@@ -105,9 +111,12 @@ def detect_elixir(frame: np.ndarray) -> int:
             best_val = val
             best_n = n
 
-    if best_val >= _ELIXIR_CONFIDENCE_THRESHOLD:
-        _last_elixir = best_n
-
+    # Always commit the best match — the previous "only update above threshold"
+    # logic could lock _last_elixir at 0 forever when matches consistently
+    # scored just below the bar (icon glow / transitions). best_n is by
+    # construction the closest template, so ambiguity-handling is better done
+    # via temporal smoothing if needed.
+    _last_elixir = best_n
     return _last_elixir
 
 
@@ -140,29 +149,29 @@ def detect_tower_health(frame: np.ndarray, tower_name: str) -> int:
 
 def detect_hand(frame: np.ndarray) -> list[str]:
     """Template-match each of the 4 card slots. Returns card names in slot order.
-    Falls back to the last confident value per slot when no template matches."""
+    A slot below the confidence threshold is reported as "unknown" so action
+    masking won't keep treating a played-away card as still in hand."""
     global _last_hand
 
     if not _CARD_TEMPLATES:
         return list(_last_hand)
 
     for slot_idx, (x1, y1, x2, y2) in enumerate(_CARD_BOXES):
-        slot = frame[y1:y2, x1:x2]
+        slot_gray = cv2.cvtColor(frame[y1:y2, x1:x2], cv2.COLOR_BGR2GRAY)
 
         best_val = -1.0
-        best_name = _last_hand[slot_idx]
+        best_name = "unknown"
 
         for name, tmpl in _CARD_TEMPLATES.items():
-            if tmpl.shape != slot.shape:
-                tmpl = cv2.resize(tmpl, (slot.shape[1], slot.shape[0]))
-            result = cv2.matchTemplate(slot, tmpl, cv2.TM_CCOEFF_NORMED)
+            if tmpl.shape != slot_gray.shape:
+                tmpl = cv2.resize(tmpl, (slot_gray.shape[1], slot_gray.shape[0]))
+            result = cv2.matchTemplate(slot_gray, tmpl, cv2.TM_CCOEFF_NORMED)
             val = result[0][0]
             if val > best_val:
                 best_val = val
                 best_name = name
 
-        if best_val >= _CARD_CONFIDENCE_THRESHOLD:
-            _last_hand[slot_idx] = best_name
+        _last_hand[slot_idx] = best_name if best_val >= _CARD_CONFIDENCE_THRESHOLD else "unknown"
 
     return list(_last_hand)
 
@@ -201,11 +210,11 @@ def detect_game_state(frame: np.ndarray) -> int:
 
 
 def _pixel_to_game_coords(cx: int, cy: int) -> tuple[int, int] | None:
-    """Convert pixel center (cx, cy) to game grid (col, row).
-    Returns None if outside grid bounds."""
-    col = int((cx - _GRID_BL[0]) / _TILE_W_PX)
-    row = int((_GRID_BL[1] - cy) / _TILE_H_PX)
-    if 0 <= col < _GRID_COLS and 0 <= row < _GRID_ROWS:
+    """Convert pixel center (cx, cy) to 1-indexed game grid (col, row).
+    (1, 1) = bottom-left tile. Returns None if outside grid bounds."""
+    col = int((cx - _GRID_BL[0]) / _TILE_W_PX) + 1
+    row = int((_GRID_BL[1] - cy) / _TILE_H_PX) + 1
+    if 1 <= col <= _GRID_COLS and 1 <= row <= _GRID_ROWS:
         return col, row
     return None
 
