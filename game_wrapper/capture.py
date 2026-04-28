@@ -61,41 +61,4 @@ class ScreenCapture:
                 sleep_for = FRAME_INTERVAL - elapsed
                 if sleep_for > 0:
                     time.sleep(sleep_for)
-
-
-def main():
-    cap = ScreenCapture(monitor_index=TARGET_MONITOR, crop=CROP_REGION)
-    cap.start()
-
-    cv2.namedWindow("capture", cv2.WINDOW_NORMAL)
-
-    fps_counter = 0
-    fps_display = 0
-    fps_timer = time.perf_counter()
-
-    try:
-        while True:
-            frame = cap.get_frame()
-            if frame is None:
-                continue
-
-            fps_counter += 1
-            now = time.perf_counter()
-            if now - fps_timer >= 1.0:
-                fps_display = fps_counter
-                fps_counter = 0
-                fps_timer = now
-
-            cv2.putText(frame, f"FPS: {fps_display}", (10, 30),
-                        cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-            cv2.imshow("capture", frame)
-
-            if cv2.waitKey(1) == 27:  # ESC to quit
-                break
-    finally:
-        cap.stop()
-        cv2.destroyAllWindows()
-
-
-if __name__ == "__main__":
-    main()
+                    

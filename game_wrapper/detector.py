@@ -47,7 +47,7 @@ def _parse_team(class_name: str) -> str | None:
 
 
 class TroopDetector:
-    def __init__(self, weights_path: str, conf_threshold: float = 0.35, device: str | None = None):
+    def __init__(self, weights_path: str, conf_threshold: float = 0.2, device: str | None = None):
         """
         Args:
             weights_path: path to the trained YOLO .pt file

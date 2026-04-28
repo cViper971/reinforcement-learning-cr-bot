@@ -1,13 +1,12 @@
-"""Gymnasium env wrapping capture + perception + actions.
+"""Gymnasium env wrapping a GameWrapper.
 
 Phase 1 reset() waits for a manually-started match: it polls until game_state
 stabilizes at 0 (running) for several consecutive frames. Auto-queueing comes
-in Phase 3 via rl.lobby.
+in Phase 3 once GameWrapper.reset_match() is filled in.
 
 Step rate: 2 Hz (500 ms boundaries). Each step: optionally place a card,
 sleep until next boundary, capture, perceive, compute reward.
 """
-import os
 import time
 from typing import Any
 
@@ -15,9 +14,7 @@ import numpy as np
 import gymnasium as gym
 from gymnasium import spaces
 
-from game_state.capture import ScreenCapture, TARGET_MONITOR, CROP_REGION
-from game_state.detector import TroopDetector
-from game_state.perception import extract_state
+from game_wrapper import GameWrapper, DEFAULT_WEIGHTS
 
 from rl.action import (
     Action, N_SLOTS, N_SPOTS, build_mask, decode, execute,
@@ -32,25 +29,19 @@ STEP_DT = 1.0 / STEP_HZ  # 0.5 s
 RESET_STABLE_FRAMES = 4   # # of consecutive running-state frames to confirm match start
 RESET_POLL_DT = 0.5
 
-DEFAULT_WEIGHTS = os.path.join(
-    os.path.dirname(__file__), "..", "assets", "models", "best.pt")
-
 
 class ClashRoyaleEnv(gym.Env):
     metadata = {"render_modes": []}
 
-    def __init__(self, weights_path: str = DEFAULT_WEIGHTS, conf_threshold: float = 0.3):
+    def __init__(self, weights_path: str = DEFAULT_WEIGHTS, conf_threshold: float = 0.2):
         super().__init__()
 
         self.action_space = spaces.MultiDiscrete([N_SLOTS, N_SPOTS])
 
-        self._cap = ScreenCapture(monitor_index=TARGET_MONITOR, crop=CROP_REGION)
-        self._detector = TroopDetector(weights_path, conf_threshold=conf_threshold)
-        self._cap.start()
-        time.sleep(0.3)
+        self._game = GameWrapper(weights_path=weights_path, conf_threshold=conf_threshold)
 
         # Initialize troop vocabulary from detector
-        _set_troop_vocab(self._detector)
+        _set_troop_vocab(self._game.troop_classes())
 
         # Create observation space with updated SCALAR_DIM
         self.observation_space = spaces.Box(0.0, 1.0, (obs_module.SCALAR_DIM,), np.float32)
@@ -70,7 +61,7 @@ class ClashRoyaleEnv(gym.Env):
         running_streak = 0
         last_print = 0.0
         while running_streak < RESET_STABLE_FRAMES:
-            state = self._read_state()
+            state = self._game.get_state()
             if state["game_state"] == 0:
                 running_streak += 1
             else:
@@ -81,7 +72,7 @@ class ClashRoyaleEnv(gym.Env):
                 last_print = now
             time.sleep(RESET_POLL_DT)
 
-        self._prev_state = self._read_state()
+        self._prev_state = self._game.get_state()
         self._next_step_deadline = time.perf_counter() + STEP_DT
         obs = encode(self._prev_state)
         info = self._info(self._prev_state)
@@ -97,7 +88,7 @@ class ClashRoyaleEnv(gym.Env):
         if not action.is_noop:
             mask = build_mask(self._prev_state["elixir"], self._prev_state["hand"])
             if mask["slot"][action.slot]:
-                execute(action)
+                execute(action, self._game)
 
         # Sleep to next 500ms boundary
         now = time.perf_counter()
@@ -106,7 +97,7 @@ class ClashRoyaleEnv(gym.Env):
             time.sleep(sleep_for)
         self._next_step_deadline += STEP_DT
 
-        state = self._read_state()
+        state = self._game.get_state()
         reward = compute_reward(self._prev_state, state)
         terminated = state["game_state"] != 0
         truncated = False
@@ -116,17 +107,9 @@ class ClashRoyaleEnv(gym.Env):
         return obs, reward, terminated, truncated, info
 
     def close(self) -> None:
-        self._cap.stop()
+        self._game.close()
 
     # --- internals ---
-
-    def _read_state(self) -> dict:
-        frame = self._cap.get_frame()
-        # cap may not have a frame on the very first call right after start()
-        while frame is None:
-            time.sleep(0.01)
-            frame = self._cap.get_frame()
-        return extract_state(frame, detector=self._detector)
 
     def _info(self, state: dict) -> dict[str, Any]:
         mask = build_mask(state["elixir"], state["hand"])

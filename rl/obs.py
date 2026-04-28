@@ -26,9 +26,9 @@ _TROOP_TO_IDX    = {}
 SCALAR_DIM       = 0
 
 
-def _set_troop_vocab(detector) -> None:
+def _set_troop_vocab(class_names) -> None:
     global TROOP_VOCAB, TROOP_VOCAB_SIZE, _TROOP_TO_IDX, SCALAR_DIM
-    TROOP_VOCAB      = sorted(name.lower() for name in detector.model.names.values())
+    TROOP_VOCAB      = sorted(name.lower() for name in class_names)
     TROOP_VOCAB_SIZE = len(TROOP_VOCAB) + 1
     _TROOP_TO_IDX    = {name: i for i, name in enumerate(TROOP_VOCAB)}
     SCALAR_DIM       = (

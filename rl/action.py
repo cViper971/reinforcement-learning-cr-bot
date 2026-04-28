@@ -13,8 +13,6 @@ from typing import NamedTuple
 
 import numpy as np
 
-from game_state.actions import play_card
-
 
 NOOP_SLOT = 4
 N_SLOTS = 5  # 4 cards + noop
@@ -78,12 +76,12 @@ def decode(action_array: np.ndarray) -> Action:
     return Action(slot=int(action_array[0]), spot_idx=int(action_array[1]))
 
 
-def execute(action: Action) -> None:
-    """Send the action to the game. No-op slot does nothing."""
+def execute(action: Action, game) -> None:
+    """Send the action to the game via a GameWrapper. No-op slot does nothing."""
     if action.is_noop:
         return
     spot = SPOTS[action.spot_idx]
-    play_card(action.slot, spot.col, spot.row)
+    game.act(action.slot, spot.col, spot.row)
 
 
 def card_cost(card_name: str) -> int:
@@ -115,8 +113,8 @@ def build_mask(elixir: int, hand: list[str]) -> dict[str, np.ndarray]:
 if __name__ == "__main__":
     import time
     import cv2
-    from game_state.capture import ScreenCapture, TARGET_MONITOR, CROP_REGION
-    from game_state.actions import _GRID_BL, _GRID_TR, _GRID_COLS, _GRID_ROWS
+    from game_wrapper.capture import ScreenCapture, TARGET_MONITOR, CROP_REGION
+    from game_wrapper.actions import _GRID_BL, _GRID_TR, _GRID_COLS, _GRID_ROWS
 
     tile_w = (_GRID_TR[0] - _GRID_BL[0]) / _GRID_COLS
     tile_h = (_GRID_BL[1] - _GRID_TR[1]) / _GRID_ROWS
