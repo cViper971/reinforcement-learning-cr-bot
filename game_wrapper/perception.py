@@ -80,8 +80,6 @@ if os.path.isdir(_ENDGAME_TEMPLATE_DIR):
         name = os.path.splitext(os.path.basename(path))[0]
         _ENDGAME_TEMPLATES[name] = cv2.imread(path)
 
-
-_ELIXIR_CONFIDENCE_THRESHOLD = 0.8
 _CARD_CONFIDENCE_THRESHOLD = 0.4
 _ENDGAME_CONFIDENCE_THRESHOLD = 0.7
 _last_elixir = 0
