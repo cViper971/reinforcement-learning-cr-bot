@@ -2,7 +2,7 @@
 
 ## How I used AI on this project
 
-I used Claude (via the Claude Code CLI) to assist in the development of this project. Claude helped me get drafts of code on the page faster, but the project plan, calibration, and most of the debugging were my own work.
+I used Claude (via the Claude Code CLI) to assist in the development of this project. Claude helped me create drafts of files quickly, but the project plan, calibration, and most of the debugging were my own work.
 
 ### Code that Claude drafted
 
@@ -15,30 +15,23 @@ I used Claude (via the Claude Code CLI) to assist in the development of this pro
 - First versions of the action mask, observation encoding, and reward function in [src/rl/action.py](src/rl/action.py), [src/rl/obs.py](src/rl/obs.py), and [src/rl/reward.py](src/rl/reward.py).
 - The `pyproject.toml` for the editable install.
 
-### What I had to debug, fix, or substantially rework
+### Design decisions, reworks, and the actual work I did
 
-The first drafts almost always had something off. Most of my time on the project was spent in the loop below:
+- **Action space.** I decided the list of named placement spots (left/right bridge, mid, princess, back) over a free 18×14 grid. The full grid wastes policy capacity on tactically equivalent positions and explodes credit assignment. I picked the 8 spots and tuned each spot's coordinates against the live overlay until they lined up with where I'd actually want to play that card.
+- **Observation space.** I designed the encoding in [src/rl/obs.py](src/rl/obs.py): normalized elixir, six tower HPs, four one-hot hand slots, and a fixed-size padded list of ally + enemy troop entries (one-hot + 6-section spatial zone each). I picked the 5-row "bridge contention band" (rows 13–17) for the zoning instead of the strict 1-row bridge, because the area immediately in front of the bridge is tactically distinct from the back area and that's what matters for placement decisions.
+- **Action masking.** I specified that the mask gates slots by elixir affordability and unknown-card status so the policy can't waste rollout steps on illegal actions. Configured the flat-array shape to match what `MaskablePPO` consumes.
+- **Reward shaping.** I picked the components and weights in [src/rl/reward.py](src/rl/reward.py): a small per-step term on net tower HP delta, a medium event term on princess kills, a large event term on king kills, and a terminal win/loss bonus. Edge-detected tower-destroyed events on HP crossing zero so a destroyed tower doesn't get re-rewarded every frame.
+- **Step rate and 50 ms key-to-click delay.** I picked 2 Hz as the action rate (fast enough to react to elixir changes, slow enough that perception + YOLO finish in budget) and added the 50 ms gap between card-key press and tile click after I noticed BlueStacks dropping clicks when the events were fired back-to-back.
+- **`GameWrapper` abstraction.** I designed the single class exposing only `get_state()`, `act()`, `reset_match()`, and `close()`. Everything else — screen capture, YOLO inference, perception extraction, input simulation, auto-queue — is hidden. The RL side has no idea how the game is being read or driven.
+- **Module split inside `game_wrapper`.** I reorganized the package into `capture` (screen grab), `detector` (YOLO), `game_state` (perception), `interact` (input + auto-queue), and `wrapper` (the public class). I refactored and regrouped these multiple times until each file had one responsibility
+- **Color-based template matching.** I noticed cards were registering as `"unknown"` whenever I couldn't afford them, because the matcher was failing on the desaturated highlight. Same problem hit the victory/defeat banners later when the arena recolor changed them. Asked for grayscale on both sides.
+- **Auto-queue hang.** Bot would sit forever after a match because the settle loop was tracking the exact `game_state` value and getting stuck on perception flicker. I asked for a flicker-tolerance counter that needs several consecutive contradictory reads before exiting.
+l times when something looked off.
+- **BlueStacks setup.** Bound key `1` over the Play Again button, set window position and resolution, configured card hotkeys, played manually past Arena 1 to unlock the Play Again UI in the first place.
 
-- **All pixel calibration constants.** Grid corners, tower bounding boxes, elixir region, card slot regions, end-game banner regions, monitor offset, and crop region — I measured all of these by hand against the live BlueStacks window using my [src/scripts/coords.py](src/scripts/coords.py) helper. The initial AI-suggested values were off by full tiles in both axes.
-- **Grid coordinate convention.** This took several iterations. Perception used 0-indexed coordinates while the action layer used 1-indexed, so every click landed exactly one tile off from the cell perception was reporting. I caught the mismatch by noticing that my intended "bridge" placements were landing on top of my king tower.
-- **Splitting the perception grid from the action grid.** The bridge in Clash Royale is taller than a regular tile, so a single uniform 18×29 grid did not map cleanly to playable rows on my side. I made the design call to split it into an 18×14 action grid (my side only) and an 18×29 perception grid (full arena).
-- **Color-invariant template matching.** Cards desaturate to grayscale when you don't have enough elixir to play them, and the original template matcher returned `"unknown"` during those frames, which made the bot think its hand was empty. The same issue surfaced later when arena-themed banner recolors broke the victory/defeat detection. I diagnosed both by watching the live overlay, and converted both the templates and the input frames to grayscale before matching.
-- **Elixir reading stuck at zero.** The initial code only updated `_last_elixir` when the template match crossed a confidence threshold. When the threshold was not consistently crossed, the value never updated and remained zero, which caused the action mask to mark every card as unaffordable. I changed the logic to commit the best match unconditionally.
-- **Hand stuck on a played card.** Same threshold-fallback issue, different module. The agent kept trying to play cards that were no longer in hand. I switched the fallback so any below-threshold match resolves to `"unknown"`, which the action mask correctly excludes.
-- **Auto-queue between matches.** The initial implementation locked onto the exact `game_state` value at function entry and got stuck when perception briefly flickered between victory and running states. I rewrote it with a flicker-tolerance counter that requires several consecutive contradictory reads before giving up.
-- **DPI scaling.** The first input layer used `pyautogui`, which operates in logical pixels. My display is at 125% scaling, so every click landed about 25% off across the arena. I diagnosed it by writing a script that moved the cursor along the diagonal of the action grid and watched the offset accumulate. I replaced `pyautogui` with `pydirectinput`, which sends physical pixel coordinates via Win32 SendInput.
-- **Apparent multiple-plays-per-step bug.** I thought the agent was firing multiple actions per step because consecutive log lines showed the same wallclock timestamp. After adding millisecond precision to the timestamps I confirmed the plays were correctly spaced 500 ms apart and just landing in the same second.
-- **Project structure and packaging.** I did the migration into `src/` and added `pyproject.toml` for the editable install, then traced and fixed all path references that broke from the move (`DEFAULT_WEIGHTS`, `_TEMPLATE_DIR`, the runs/checkpoints directories, etc.).
-- **Action mask shape.** The initial implementation returned a `dict` with separate `"slot"` and `"spot"` keys. MaskablePPO actually expects a flat 1-D boolean array of length `sum(action_space.nvec)`, so I flattened the output.
-- **Off-by-one in obs.py zoning.** Perception emits 1-indexed coordinates but the observation encoder's row thresholds were written for 0-indexed. I corrected the zone thresholds.
+### YOLO troop detector
 
-### YOLO model
-
-I fine-tuned the YOLO troop detector myself on a custom Clash Royale screenshot dataset that I collected and annotated by hand. Claude drafted the training script ([src/scripts/train_yolo.py](src/scripts/train_yolo.py)) but did not generate any of the labels.
-
-### What I want graders to take away
-
-I understand every line of code in this repository. I can walk through any module without notes. AI assistance accelerated implementation, but where the AI suggested something I disagreed with, I pushed back or rewrote it. I exercised every code path personally during development.
+I fine-tuned the YOLO troop detector myself. I used a publicly available Clash Royale dataset from Roboflow ([clash-royale-qexh0](https://universe.roboflow.com/enrique-uu9rp/clash-royale-qexh0)) as the training data, ran the training on Google Colab to produce `models/best.pt`, and integrated the resulting weights into perception. Claude drafted the training script ([src/scripts/train_yolo.py](src/scripts/train_yolo.py)) but did not select the dataset, configure the run, or generate any labels.
 
 ## External libraries
 
@@ -61,10 +54,4 @@ I understand every line of code in this repository. I can walk through any modul
 
 ## Datasets
 
-- **Custom Clash Royale screenshot dataset.** Collected and annotated by me. Not redistributed; only the fine-tuned weights ship with this repository.
-- No external datasets are used.
-
-## Reference materials
-
-- [Supercell's June 2025 announcement](https://x.com/ClashRoyale/status/1934600054704075062) about disabling Play Again in 2v2 modes, which I checked to confirm Play Again still works in 1v1 Trophy Road.
-- The Stable-Baselines3 documentation for default PPO hyperparameter recommendations.
+- **Custom Clash Royale screenshot dataset.** Found on Roboflow: https://universe.roboflow.com/enrique-uu9rp/clash-royale-qexh0

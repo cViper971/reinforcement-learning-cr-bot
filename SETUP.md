@@ -62,11 +62,3 @@ python -m rl.train --total-steps 5000 --run-name smoke-test
 ```
 
 Press **Q** at any time (works globally; BlueStacks can have focus) to stop training cleanly. The final model saves to `models/checkpoints/<run-name>/last.zip`.
-
-Tensorboard:
-
-```bash
-tensorboard --logdir models/runs
-```
-
-Open http://localhost:6006 in a browser to see live training curves.
