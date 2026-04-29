@@ -27,8 +27,8 @@ python -m rl.train --resume models/checkpoints/cr-mppo/last.zip
 
 ## Video Links
 
-- **Demo (3–5 min, non-technical):** [Zoom recording](https://duke.zoom.us/rec/share/5nxMVXQLwcBhn1uLI1SkgOs-AU6FDwS23S8jZ6nZU-sqb8vTG8KmaSyKnXoBp78k.aqzglyoyYEORea7V)
-- **Technical walkthrough (5–10 min):** _uploading — link will be added to [videos/links.txt](videos/links.txt) once Zoom finishes processing_
+- **Demo (3–5 min, non-technical):** [videos/demo.mp4](videos/demo.mp4)
+- **Technical walkthrough (5–10 min):** [videos/technical.mp4](videos/technical.mp4)
 
 ## Evaluation
 
@@ -38,10 +38,10 @@ Validation metrics from `models/best.pt` against the held-out split of the Robof
 
 | Metric         | Value |
 |----------------|-------|
-| mAP@0.5        | _fill from `yolo val`_ |
-| mAP@0.5-0.95   | _fill from `yolo val`_ |
-| Precision      | _fill from `yolo val`_ |
-| Recall         | _fill from `yolo val`_ |
+| mAP@0.5        | 0.759 |
+| mAP@0.5-0.95   | 0.567 |
+| Precision      | 0.859 |
+| Recall         | 0.669 |
 
 ### MaskablePPO training
 
@@ -60,4 +60,4 @@ Snapshot from `models/runs/cr-mppo/`:
 
 Reading the metrics: bounded `approx_kl` and zero `clip_fraction` confirm PPO updates are stable; high entropy means exploration is still active; positive `explained_variance` means the critic is starting to fit returns. `ep_rew_mean` near zero is consistent with near-random play — the run is far short of strategic convergence (typical RL on similar live games needs ≥100 K env steps), but every gradient signal is healthy.
 
-Still, I ultimately didn't have as much time to train the model as I wanted, resulting in performance that was sub-par
+Still, I ultimately didn't have as much time to train the model as I wanted, resulting in performance that was sub-par.
