@@ -73,7 +73,7 @@ def card_cost(card_name: str) -> int:
     return CARD_COSTS.get(card_name, UNKNOWN_CARD_COST)
 
 def build_mask(elixir: int, hand: list[str]) -> np.ndarray:
-    mask = np.zeros(N_SLOT + N_SPOTS, dtype=bool)
+    mask = np.zeros(N_SLOTS + N_SPOTS, dtype=bool)
     for s in range(4):
         card = hand[s]
         if card != "unknown" and card_cost(card) <= elixir:

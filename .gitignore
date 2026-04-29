@@ -2,3 +2,8 @@
 __pycache__/
 *.pyc
 *.egg-info/
+
+# Training artifacts — don't commit
+runs/
+checkpoints/
+*.zip

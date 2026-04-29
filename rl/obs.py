@@ -7,9 +7,10 @@ GRID_COLS   = 18
 GRID_ROWS   = 29
 N_SECTIONS  = 6  # ally_left/right, bridge_left/right, enemy_left/right
 
-_ALLY_ROW_MAX   = 11   # rows 0-11 = ally zone
-_BRIDGE_ROW_MAX = 16   # rows 12-16 = bridge, 17-28 = enemy
-_MID_COL        = GRID_COLS // 2  # col < 9 = left, >= 9 = right
+# Perception emits 1-indexed (col, row) with (1,1) = bottom-left, max (18,29).
+_ALLY_ROW_MAX   = 12   # rows 1-12 = ally side
+_BRIDGE_ROW_MAX = 17   # rows 13-17 = bridge band, 18-29 = enemy side
+_MID_COL        = 10   # col < 10 = left, >= 10 = right (true midline at 9.5)
 
 TOWER_ORDER = [
     "my_left_princess", "my_right_princess", "my_king",

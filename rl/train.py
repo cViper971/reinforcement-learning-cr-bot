@@ -6,13 +6,12 @@ to checkpoints/.
 
 Usage:
     python -m rl.train --total-steps 50000
-    python -m rl.train --resume checkpoints/last.zip
+    python -m rl.train --resume checkpoints/cr-mppo/last.zip
 """
 import argparse
 import os
 
 from sb3_contrib import MaskablePPO
-from sb3_contrib.common.maskable.callbacks import MaskableEvalCallback
 from stable_baselines3.common.callbacks import BaseCallback, CheckpointCallback
 
 from rl.env import ClashRoyaleEnv, _kill
@@ -29,13 +28,13 @@ class KillSwitchCallback(BaseCallback):
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("--total-steps", type=int, default=2500, help="default sized for a ~20min wall-clock session at 2Hz")
-    p.add_argument("--n-steps", type=int, default=128, help="rollout length per update (~half a match at 2Hz)")
-    p.add_argument("--batch-size", type=int, default=32)
+    p.add_argument("--total-steps", type=int, default=2500)
+    p.add_argument("--n-steps", type=int, default=64)
+    p.add_argument("--batch-size", type=int, default=16)
     p.add_argument("--lr", type=float, default=3e-4)
-    p.add_argument("--gamma", type=float, default=0.995, help="high gamma since reward is sparse and matches are long")
+    p.add_argument("--gamma", type=float, default=0.995)
     p.add_argument("--ent-coef", type=float, default=0.01)
-    p.add_argument("--n-epochs", type=int, default=4, help="few epochs — sample efficiency over reuse, data is real-time")
+    p.add_argument("--n-epochs", type=int, default=10)
     p.add_argument("--save-every", type=int, default=500)
     p.add_argument("--resume", type=str, default=None)
     p.add_argument("--run-name", type=str, default="cr-mppo")

@@ -8,7 +8,7 @@
 Tower-destroyed events are edge-detected on HP crossing zero, so a tower
 sitting at 0% across many steps doesn't get re-rewarded.
 
-Coefficients are starting points; expect to tune in Phase 4.
+Coefficients are starting points; tune as training data accumulates.
 """
 HP_DELTA_COEF = 0.01
 PRINCESS_COEF = 0.5
