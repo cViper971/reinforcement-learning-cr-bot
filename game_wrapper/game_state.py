@@ -15,9 +15,7 @@ _TILE_H_PX = (_GRID_BL[1] - _GRID_TR[1]) / _GRID_ROWS
 # Elixir number bounding box (frame-relative coords)
 _ELIXIR_NUM_BOX = (153, 1014, 199, 1061)  # x1, y1, x2, y2
 
-# Card slot bounding boxes (frame-relative). Derived from calibration:
-#   card 1 top-left = (138, 898), card 1 bottom-right = (239, 1024),
-#   card 4 bottom-right = (581, 1024). Pitch = (581-239)/3 = 114.
+# Card slot bounding boxes (frame-relative).
 _CARD_BOXES = [
     (138, 898, 239, 1024),
     (252, 898, 353, 1024),
@@ -25,9 +23,7 @@ _CARD_BOXES = [
     (480, 898, 581, 1024),
 ]
 
-# End-game banner bounding boxes (frame-relative). VICTORY and DEFEAT banners
-# appear at different positions, so they need separate boxes. Each template is
-# matched only against its own box.
+# End-game banner bounding boxes (frame-relative)
 _ENDGAME_BOXES = {
     "victory": (214, 416, 387, 453),
     "defeat":  (218,  94, 381, 137),
@@ -59,9 +55,7 @@ for i in range(11):
     if os.path.exists(path):
         _ELIXIR_TEMPLATES[i] = cv2.imread(path)
 
-# Load card templates — filename (without .png) = card name. Stored as
-# grayscale so matching is invariant to the desaturated "not enough elixir"
-# look (cards render black-and-white when uncastable).
+# Load card templates
 _CARD_TEMPLATE_DIR = os.path.join(_TEMPLATE_DIR, "cards")
 _CARD_TEMPLATES: dict[str, np.ndarray] = {}
 
@@ -71,8 +65,7 @@ if os.path.isdir(_CARD_TEMPLATE_DIR):
         bgr = cv2.imread(path)
         _CARD_TEMPLATES[name] = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
 
-# Load endgame banner templates — expects victory.png and defeat.png. Stored
-# as grayscale so matching survives arena-themed banner recolors.
+# Load endgame banner templates
 _ENDGAME_TEMPLATE_DIR = os.path.join(_TEMPLATE_DIR, "endgame")
 _ENDGAME_TEMPLATES: dict[str, np.ndarray] = {}
 
@@ -86,7 +79,6 @@ _CARD_CONFIDENCE_THRESHOLD = 0.4
 _ENDGAME_CONFIDENCE_THRESHOLD = 0.7
 _last_elixir = 0
 _last_hand: list[str] = ["unknown"] * 4
-
 
 def detect_elixir(frame: np.ndarray) -> int:
     """Match the elixir digit region against saved templates.
@@ -111,11 +103,6 @@ def detect_elixir(frame: np.ndarray) -> int:
             best_val = val
             best_n = n
 
-    # Always commit the best match — the previous "only update above threshold"
-    # logic could lock _last_elixir at 0 forever when matches consistently
-    # scored just below the bar (icon glow / transitions). best_n is by
-    # construction the closest template, so ambiguity-handling is better done
-    # via temporal smoothing if needed.
     _last_elixir = best_n
     return _last_elixir
 

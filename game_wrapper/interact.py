@@ -2,7 +2,7 @@ import time
 import mss
 import pydirectinput
 
-from .capture import TARGET_MONITOR, CROP_REGION
+from .wrapper import TARGET_MONITOR, CROP_REGION
 
 pydirectinput.FAILSAFE = True
 pydirectinput.PAUSE = 0
@@ -40,8 +40,8 @@ def play_card(slot: int, col: int, row: int) -> None:
     pydirectinput.click(sx, sy)
 
 def reset_match(get_state) -> None:
-    settle_seconds = 5.0
-    poll_dt = 0.25
+    settle_seconds = 2.0
+    poll_dt = 0.2
     flicker_grace= 3
     zero_streak = 0
     start = time.perf_counter()

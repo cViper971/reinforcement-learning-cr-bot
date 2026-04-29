@@ -2,14 +2,14 @@
 import os
 import time
 
+DEFAULT_WEIGHTS = os.path.join(os.path.dirname(__file__), "..", "assets", "models", "best.pt")
+TARGET_MONITOR = 1
+CROP_REGION = {'left': 655, 'top': 0, 'width': 608, 'height': 1080}
+
 from .capture import ScreenCapture
 from .detector import TroopDetector
 from .game_state import extract_state
 from .interact import play_card, reset_match
-
-DEFAULT_WEIGHTS = os.path.join(os.path.dirname(__file__), "..", "assets", "models", "best.pt")
-TARGET_MONITOR = 1
-CROP_REGION = {'left': 655, 'top': 0, 'width': 608, 'height': 1080}
 
 class GameWrapper:
     def __init__(self, weights_path: str = DEFAULT_WEIGHTS, conf_threshold: float = 0.2):
