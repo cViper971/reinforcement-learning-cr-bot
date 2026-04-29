@@ -71,14 +71,16 @@ if os.path.isdir(_CARD_TEMPLATE_DIR):
         bgr = cv2.imread(path)
         _CARD_TEMPLATES[name] = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
 
-# Load endgame banner templates — expects victory.png and defeat.png
+# Load endgame banner templates — expects victory.png and defeat.png. Stored
+# as grayscale so matching survives arena-themed banner recolors.
 _ENDGAME_TEMPLATE_DIR = os.path.join(_TEMPLATE_DIR, "endgame")
 _ENDGAME_TEMPLATES: dict[str, np.ndarray] = {}
 
 if os.path.isdir(_ENDGAME_TEMPLATE_DIR):
     for path in glob.glob(os.path.join(_ENDGAME_TEMPLATE_DIR, "*.png")):
         name = os.path.splitext(os.path.basename(path))[0]
-        _ENDGAME_TEMPLATES[name] = cv2.imread(path)
+        bgr = cv2.imread(path)
+        _ENDGAME_TEMPLATES[name] = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
 
 _CARD_CONFIDENCE_THRESHOLD = 0.4
 _ENDGAME_CONFIDENCE_THRESHOLD = 0.7
@@ -188,10 +190,10 @@ def detect_game_state(frame: np.ndarray) -> int:
         if x2 <= x1 or y2 <= y1:
             continue
 
-        region = frame[y1:y2, x1:x2]
-        if tmpl.shape != region.shape:
-            tmpl = cv2.resize(tmpl, (region.shape[1], region.shape[0]))
-        result = cv2.matchTemplate(region, tmpl, cv2.TM_CCOEFF_NORMED)
+        region_gray = cv2.cvtColor(frame[y1:y2, x1:x2], cv2.COLOR_BGR2GRAY)
+        if tmpl.shape != region_gray.shape:
+            tmpl = cv2.resize(tmpl, (region_gray.shape[1], region_gray.shape[0]))
+        result = cv2.matchTemplate(region_gray, tmpl, cv2.TM_CCOEFF_NORMED)
         scores[name] = float(result[0][0])
 
     if not scores:
@@ -240,91 +242,3 @@ def extract_state(frame: np.ndarray, detector=None) -> dict:
             troops.append(troop_dict)
         state["troops"] = troops
     return state
-
-
-# --- debug ---
-if __name__ == "__main__":
-    import os
-    import time
-    from .capture import ScreenCapture, TARGET_MONITOR, CROP_REGION
-    from .detector import TroopDetector
-
-    weights_path = os.path.join(os.path.dirname(__file__), "..", "assets", "models", "best.pt")
-    detector = TroopDetector(weights_path, conf_threshold=0.3)
-
-    cap = ScreenCapture(monitor_index=TARGET_MONITOR, crop=CROP_REGION)
-    cap.start()
-    time.sleep(0.3)
-
-    cv2.namedWindow("debug", cv2.WINDOW_NORMAL)
-
-    last_print = 0
-    while True:
-        frame = cap.get_frame()
-        if frame is None:
-            continue
-
-        state = extract_state(frame, detector=detector)
-        now = time.time()
-        if now - last_print >= 5:
-            print(f"Elixir: {state['elixir']}  game_state: {state['game_state']}")
-            print(f"  hand: {state['hand']}")
-            for name in _TOWER_BOXES:
-                print(f"  {name}: {state[name]}%")
-            print(f"  troops ({len(state['troops'])}):")
-            for t in state["troops"]:
-                if "col" in t:
-                    print(f"    {t['team']:5s} {t['name']:20s} @ grid({t['col']},{t['row']})  conf={t['confidence']:.2f}")
-                else:
-                    print(f"    {t['team']:5s} {t['name']:20s} @ out-of-bounds  conf={t['confidence']:.2f}")
-            print()
-            last_print = now
-
-        vis = frame.copy()
-
-        # Elixir
-        x1, y1, x2, y2 = _ELIXIR_NUM_BOX
-        cv2.rectangle(vis, (x1, y1), (x2, y2), (255, 0, 255), 2)
-        cv2.putText(vis, f"Elixir: {state['elixir']}", (10, 40),
-                    cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255, 100, 255), 2)
-
-        # Endgame banner regions + state
-        for ex1, ey1, ex2, ey2 in _ENDGAME_BOXES.values():
-            if ex2 > ex1 and ey2 > ey1:
-                cv2.rectangle(vis, (ex1, ey1), (ex2, ey2), (0, 255, 255), 2)
-        gs = state["game_state"]
-        gs_label = {1: "WON", -1: "LOST", 0: "running"}[gs]
-        gs_color = (0, 255, 0) if gs == 1 else (0, 0, 255) if gs == -1 else (200, 200, 200)
-        cv2.putText(vis, f"Game: {gs_label}", (10, 80),
-                    cv2.FONT_HERSHEY_SIMPLEX, 1.0, gs_color, 2)
-
-        # Tower health
-        for name, (tx1, ty1, tx2, ty2) in _TOWER_BOXES.items():
-            hp = state[name]
-            color = (0, 255, 0) if hp > 50 else (0, 255, 255) if hp > 25 else (0, 0, 255)
-            cv2.rectangle(vis, (tx1, ty1), (tx2, ty2), color, 2)
-            cv2.putText(vis, f"{name}: {hp}%", (tx1, ty1 - 5),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.4, color, 1)
-
-        # Cards
-        for slot_idx, (cx1, cy1, cx2, cy2) in enumerate(_CARD_BOXES):
-            cv2.rectangle(vis, (cx1, cy1), (cx2, cy2), (0, 255, 255), 2)
-            cv2.putText(vis, state["hand"][slot_idx], (cx1, cy1 - 5),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 255), 1)
-
-        # Troops — blue = ally, red = enemy, green = unknown team
-        for t in state["troops"]:
-            tx1, ty1, tx2, ty2 = t["bbox"]
-            color = (255, 128, 0) if t["team"] == "ally" else (0, 0, 255) if t["team"] == "enemy" else (0, 255, 0)
-            cv2.rectangle(vis, (tx1, ty1), (tx2, ty2), color, 2)
-            label = f"{t['team'] or '?'} {t['name']}"
-            cv2.putText(vis, label, (tx1, ty1 - 5),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.4, color, 1)
-
-        cv2.imshow("debug", vis)
-
-        if cv2.waitKey(1) == 27:
-            break
-
-    cap.stop()
-    cv2.destroyAllWindows()

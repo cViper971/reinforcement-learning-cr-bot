@@ -1,16 +1,4 @@
-"""
-YOLO troop/object detector wrapper.
-
-Usage:
-    from game.detector import TroopDetector
-
-    detector = TroopDetector("assets/models/best.pt")
-    detections = detector.detect(frame)
-    # detections = [
-    #     {"name": "Archers", "confidence": 0.87, "bbox": (x1, y1, x2, y2), "center": (cx, cy)},
-    #     ...
-    # ]
-"""
+"""YOLO troop/object detector wrapper."""
 
 import os
 from dataclasses import dataclass
@@ -97,41 +85,3 @@ class TroopDetector:
             ))
 
         return detections
-
-
-# --- debug ---
-if __name__ == "__main__":
-    import cv2
-    import time
-    from .capture import ScreenCapture, TARGET_MONITOR, CROP_REGION
-
-    WEIGHTS = os.path.join(os.path.dirname(__file__), "..", "assets", "models", "best.pt")
-
-    detector = TroopDetector(WEIGHTS)
-    cap = ScreenCapture(monitor_index=TARGET_MONITOR, crop=CROP_REGION)
-    cap.start()
-    time.sleep(0.3)
-
-    cv2.namedWindow("yolo_debug", cv2.WINDOW_NORMAL)
-
-    while True:
-        frame = cap.get_frame()
-        if frame is None:
-            continue
-
-        detections = detector.detect(frame)
-
-        vis = frame.copy()
-        for d in detections:
-            x1, y1, x2, y2 = d.bbox
-            color = (255, 128, 0) if d.team == "ally" else (0, 0, 255) if d.team == "enemy" else (0, 255, 0)
-            cv2.rectangle(vis, (x1, y1), (x2, y2), color, 2)
-            cv2.putText(vis, f"{d.name} {d.confidence:.2f}", (x1, y1 - 5),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
-
-        cv2.imshow("yolo_debug", vis)
-        if cv2.waitKey(1) == 27:
-            break
-
-    cap.stop()
-    cv2.destroyAllWindows()

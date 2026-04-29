@@ -81,67 +81,19 @@ def card_cost(card_name: str) -> int:
     return CARD_COSTS.get(card_name, UNKNOWN_CARD_COST)
 
 
-def build_mask(elixir: int, hand: list[str]) -> dict[str, np.ndarray]:
-    """Per-component mask for sb3-contrib MaskablePPO over MultiDiscrete([5, N_SPOTS]).
+def build_mask(elixir: int, hand: list[str]) -> np.ndarray:
+    """Flat action mask for sb3-contrib MaskablePPO over MultiDiscrete([5, N_SPOTS]).
 
-    Returns a dict with 'slot' (shape [5]) and 'spot' (shape [N_SPOTS]).
-    A slot is valid if its card is known and affordable. No-op is always valid.
-    All spots are always valid (placement-legality varies per card and changes
-    after first tower drop — left as future work).
-    """
-    slot_mask = np.zeros(N_SLOTS, dtype=bool)
+    Returns a 1-D bool array of shape (N_SLOTS + N_SPOTS,) — the format MaskablePPO
+    expects: per-component masks concatenated in action_space.nvec order.
+    A slot is valid if its card is known and affordable; no-op is always valid.
+    All spots are always valid (placement-legality varies per card / first tower
+    drop — left as future work)."""
+    mask = np.zeros(N_SLOTS + N_SPOTS, dtype=bool)
     for s in range(4):
         card = hand[s]
-        if card == "unknown":
-            continue
-        if card_cost(card) <= elixir:
-            slot_mask[s] = True
-    slot_mask[NOOP_SLOT] = True
-
-    spot_mask = np.ones(N_SPOTS, dtype=bool)
-    return {"slot": slot_mask, "spot": spot_mask}
-
-
-# --- debug: overlay spot markers on the live frame to calibrate coords ---
-if __name__ == "__main__":
-    import time
-    import cv2
-    from game_wrapper.capture import ScreenCapture, TARGET_MONITOR, CROP_REGION
-    from game_wrapper.actions import _GRID_BL, _GRID_TR, _GRID_COLS, _GRID_ROWS
-
-    tile_w = (_GRID_TR[0] - _GRID_BL[0]) / _GRID_COLS
-    tile_h = (_GRID_BL[1] - _GRID_TR[1]) / _GRID_ROWS
-
-    def spot_to_frame_xy(spot: Spot) -> tuple[int, int]:
-        # Inverse of game_wrapper.actions.tile_to_screen, dropping the monitor
-        # offset so we get coords in the cropped frame's space.
-        fx = _GRID_BL[0] + (spot.col - 0.5) * tile_w
-        fy = _GRID_BL[1] - (spot.row - 0.5) * tile_h
-        return round(fx), round(fy)
-
-    cap = ScreenCapture(monitor_index=TARGET_MONITOR, crop=CROP_REGION)
-    cap.start()
-    time.sleep(0.3)
-
-    cv2.namedWindow("spot_overlay", cv2.WINDOW_NORMAL)
-
-    print(f"{N_SPOTS} spots loaded. ESC to quit.")
-    while True:
-        frame = cap.get_frame()
-        if frame is None:
-            continue
-
-        vis = frame.copy()
-        for i, spot in enumerate(SPOTS):
-            x, y = spot_to_frame_xy(spot)
-            color = (0, 255, 255)
-            cv2.circle(vis, (x, y), 8, color, 2)
-            cv2.putText(vis, f"{i}:{spot.name}", (x + 10, y + 4),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.4, color, 1)
-
-        cv2.imshow("spot_overlay", vis)
-        if cv2.waitKey(1) == 27:
-            break
-
-    cap.stop()
-    cv2.destroyAllWindows()
+        if card != "unknown" and card_cost(card) <= elixir:
+            mask[s] = True
+    mask[NOOP_SLOT] = True
+    mask[N_SLOTS:] = True  # all spots always valid
+    return mask

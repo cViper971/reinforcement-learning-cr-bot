@@ -1,8 +1,8 @@
 """Gymnasium env wrapping a GameWrapper.
 
-Phase 1 reset() waits for a manually-started match: it polls until game_state
-stabilizes at 0 (running) for several consecutive frames. Auto-queueing comes
-in Phase 3 once GameWrapper.reset_match() is filled in.
+reset() auto-queues the next match via GameWrapper.reset_match() (presses
+BlueStacks key '1' once the post-match banner has settled), then polls until
+game_state stabilizes at 0 (running).
 
 Step rate: 2 Hz (500 ms boundaries). Each step: optionally place a card,
 sleep until next boundary, capture, perceive, compute reward.
@@ -36,7 +36,7 @@ threading.Thread(target=_kill_watcher, daemon=True).start()
 from game_wrapper import GameWrapper, DEFAULT_WEIGHTS
 
 from rl.action import (
-    Action, N_SLOTS, N_SPOTS, SPOTS, build_mask, card_cost, decode, execute,
+    N_SLOTS, N_SPOTS, SPOTS, build_mask, card_cost, decode, execute,
 )
 import rl.obs as obs_module
 from rl.obs import _set_troop_vocab, encode
@@ -73,9 +73,13 @@ class ClashRoyaleEnv(gym.Env):
     def reset(self, *, seed: int | None = None, options: dict | None = None) -> tuple[dict, dict]:
         super().reset(seed=seed)
 
-        # Phase 1: wait for human to queue a match. Poll until we see N
-        # consecutive running-state frames.
-        print("[env] waiting for match start (queue manually)... press Q to kill, Ctrl+C to abort")
+        # If we're sitting on a finished match, trigger Play Again. Otherwise
+        # this is a no-op (e.g., very first reset before the first match).
+        if self._game.get_state()["game_state"] != 0:
+            print("[env] match ended — auto-queueing next match via reset_match()")
+            self._game.reset_match()
+
+        print("[env] waiting for match to start... press Q to kill, Ctrl+C to abort")
         running_streak = 0
         last_print = 0.0
         while running_streak < RESET_STABLE_FRAMES:
@@ -106,7 +110,7 @@ class ClashRoyaleEnv(gym.Env):
         # erroring — keeps random/exploration policies happy.
         if not action.is_noop:
             mask = build_mask(self._prev_state["elixir"], self._prev_state["hand"])
-            if mask["slot"][action.slot]:
+            if mask[action.slot]:
                 now_pc = time.perf_counter()
                 last_pc = getattr(self, "_last_play_t", None)
                 dt_since_last = (now_pc - last_pc) if last_pc is not None else 0.0
@@ -140,6 +144,13 @@ class ClashRoyaleEnv(gym.Env):
     def close(self) -> None:
         self._game.close()
 
+    # sb3-contrib MaskablePPO calls this to fetch the current legal-action
+    # mask. Must return a 1-D bool array of length sum(action_space.nvec).
+    def action_masks(self) -> np.ndarray:
+        if self._prev_state is None:
+            return np.ones(N_SLOTS + N_SPOTS, dtype=bool)
+        return build_mask(self._prev_state["elixir"], self._prev_state["hand"])
+
     # --- internals ---
 
     def _info(self, state: dict) -> dict[str, Any]:
@@ -148,33 +159,3 @@ class ClashRoyaleEnv(gym.Env):
             "raw": state,
             "action_mask": mask,
         }
-
-
-# --- debug: random policy plays one episode ---
-if __name__ == "__main__":
-    env = ClashRoyaleEnv()
-    obs, info = env.reset()
-    total_r = 0.0
-    steps = 0
-    t0 = time.time()
-    try:
-        print("[env] press Q at any time to kill the bot")
-        done = False
-        while not done:
-            if _kill.is_set():
-                break
-            mask = info["action_mask"]
-            # Sample respecting per-component mask (so random play is at least
-            # affordable — otherwise nothing ever gets placed early in a match).
-            valid_slots = np.flatnonzero(mask["slot"])
-            slot = int(np.random.choice(valid_slots))
-            spot = int(np.random.randint(N_SPOTS))
-            obs, reward, terminated, truncated, info = env.step(np.array([slot, spot]))
-            total_r += reward
-            steps += 1
-            done = terminated or truncated
-    finally:
-        dt = time.time() - t0
-        print(f"\n[done] steps={steps} total_reward={total_r:+.3f} "
-              f"elapsed={dt:.1f}s ({steps/max(dt,0.01):.2f} steps/s)")
-        env.close()
