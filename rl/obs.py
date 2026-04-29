@@ -3,13 +3,13 @@ from rl.action import CARD_COSTS
 
 MAX_ALLIES  = 10
 MAX_ENEMIES = 10
-GRID_COLS   = 14
+GRID_COLS   = 18
 GRID_ROWS   = 29
 N_SECTIONS  = 6  # ally_left/right, bridge_left/right, enemy_left/right
 
 _ALLY_ROW_MAX   = 11   # rows 0-11 = ally zone
 _BRIDGE_ROW_MAX = 16   # rows 12-16 = bridge, 17-28 = enemy
-_MID_COL        = GRID_COLS // 2  # col < 7 = left, >= 7 = right
+_MID_COL        = GRID_COLS // 2  # col < 9 = left, >= 9 = right
 
 TOWER_ORDER = [
     "my_left_princess", "my_right_princess", "my_king",

@@ -16,9 +16,7 @@ import numpy as np
 import gymnasium as gym
 from gymnasium import spaces
 
-
 _kill = threading.Event()
-
 
 def _kill_watcher() -> None:
     """Background thread that sets _kill the moment Q is pressed.
@@ -34,10 +32,7 @@ def _kill_watcher() -> None:
 threading.Thread(target=_kill_watcher, daemon=True).start()
 
 from game_wrapper import GameWrapper, DEFAULT_WEIGHTS
-
-from rl.action import (
-    N_SLOTS, N_SPOTS, SPOTS, build_mask, card_cost, decode, execute,
-)
+from rl.action import (N_SLOTS, N_SPOTS, SPOTS, build_mask, card_cost, decode, execute,)
 import rl.obs as obs_module
 from rl.obs import _set_troop_vocab, encode
 from rl.reward import compute as compute_reward
@@ -65,16 +60,14 @@ class ClashRoyaleEnv(gym.Env):
         # Create observation space with updated SCALAR_DIM
         self.observation_space = spaces.Box(0.0, 1.0, (obs_module.SCALAR_DIM,), np.float32)
 
-        self._prev_state: dict | None = None
-        self._next_step_deadline: float = 0.0
+        self._prev_state = None
+        self._next_step_deadline = 0.0
 
     # --- gym API ---
-
     def reset(self, *, seed: int | None = None, options: dict | None = None) -> tuple[dict, dict]:
         super().reset(seed=seed)
 
-        # If we're sitting on a finished match, trigger Play Again. Otherwise
-        # this is a no-op (e.g., very first reset before the first match).
+        # If we're sitting on a finished match, trigger Play Again.
         if self._game.get_state()["game_state"] != 0:
             print("[env] match ended — auto-queueing next match via reset_match()")
             self._game.reset_match()
@@ -111,16 +104,7 @@ class ClashRoyaleEnv(gym.Env):
         if not action.is_noop:
             mask = build_mask(self._prev_state["elixir"], self._prev_state["hand"])
             if mask[action.slot]:
-                now_pc = time.perf_counter()
-                last_pc = getattr(self, "_last_play_t", None)
-                dt_since_last = (now_pc - last_pc) if last_pc is not None else 0.0
-                card = self._prev_state['hand'][action.slot]
-                ts = time.strftime('%H:%M:%S') + f".{int(time.time() * 1000) % 1000:03d}"
-                print(f"[{ts} +{dt_since_last:.3f}s] "
-                      f"played {card} (cost {card_cost(card)}) at {SPOTS[action.spot_idx].name} "
-                      f"| elixir={self._prev_state['elixir']}",
-                      flush=True)
-                self._last_play_t = now_pc
+                print(f"play: {self._prev_state['hand'][action.slot]} → {SPOTS[action.spot_idx].name}", flush=True)
                 execute(action, self._game)
 
         # Sleep to next 500ms boundary
@@ -152,7 +136,6 @@ class ClashRoyaleEnv(gym.Env):
         return build_mask(self._prev_state["elixir"], self._prev_state["hand"])
 
     # --- internals ---
-
     def _info(self, state: dict) -> dict[str, Any]:
         mask = build_mask(state["elixir"], state["hand"])
         return {

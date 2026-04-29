@@ -13,10 +13,8 @@ from typing import NamedTuple
 
 import numpy as np
 
-
 NOOP_SLOT = 4
-N_SLOTS = 5  # 4 cards + noop
-
+N_SLOTS = 5
 
 @dataclass(frozen=True)
 class Spot:
@@ -24,9 +22,7 @@ class Spot:
     col: int
     row: int
 
-
 # Coords on the my-side action grid (1-indexed, (1,1) = bottom-left).
-# Calibrate with the debug overlay (`python -m rl.action`) before training.
 SPOTS: list[Spot] = [
     Spot("left_bridge",     4, 14),
     Spot("right_bridge",   15, 14),
@@ -40,8 +36,7 @@ SPOTS: list[Spot] = [
 N_SPOTS = len(SPOTS)
 
 
-# Card -> elixir cost. Extend as more card templates are added under
-# assets/templates/cards/. Keys must match template filename stem.
+# Card -> elixir cost.
 CARD_COSTS: dict[str, int] = {
     "archers":       3,
     "giant":         5,
@@ -63,11 +58,9 @@ class Action(NamedTuple):
     def is_noop(self) -> bool:
         return self.slot == NOOP_SLOT
 
-
 def decode(action_array: np.ndarray) -> Action:
     """Convert MultiDiscrete sample [slot, spot_idx] into an Action."""
     return Action(slot=int(action_array[0]), spot_idx=int(action_array[1]))
-
 
 def execute(action: Action, game) -> None:
     """Send the action to the game via a GameWrapper. No-op slot does nothing."""
@@ -76,20 +69,11 @@ def execute(action: Action, game) -> None:
     spot = SPOTS[action.spot_idx]
     game.act(action.slot, spot.col, spot.row)
 
-
 def card_cost(card_name: str) -> int:
     return CARD_COSTS.get(card_name, UNKNOWN_CARD_COST)
 
-
 def build_mask(elixir: int, hand: list[str]) -> np.ndarray:
-    """Flat action mask for sb3-contrib MaskablePPO over MultiDiscrete([5, N_SPOTS]).
-
-    Returns a 1-D bool array of shape (N_SLOTS + N_SPOTS,) — the format MaskablePPO
-    expects: per-component masks concatenated in action_space.nvec order.
-    A slot is valid if its card is known and affordable; no-op is always valid.
-    All spots are always valid (placement-legality varies per card / first tower
-    drop — left as future work)."""
-    mask = np.zeros(N_SLOTS + N_SPOTS, dtype=bool)
+    mask = np.zeros(N_SLOT + N_SPOTS, dtype=bool)
     for s in range(4):
         card = hand[s]
         if card != "unknown" and card_cost(card) <= elixir:
