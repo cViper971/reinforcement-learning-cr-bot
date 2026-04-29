@@ -1,10 +1,10 @@
-# Clash Royale RL Bot
+# Clash Royale Reinforcement-Learning Bot
 
-A reinforcement-learning agent that plays the live mobile game **Clash Royale** in real time, by reading raw pixels from a BlueStacks emulator window and controlling the game with simulated mouse + keyboard input.
+I created a reinforcement-learning agent that plays the live mobile game **Clash Royale** in real time, by reading raw pixels from a BlueStacks emulator window and controlling the game with simulated mouse + keyboard input.
 
 ## What it Does
 
-This project builds an end-to-end pipeline that lets a `MaskablePPO` agent train on actual matches against live opponents. A 30 fps screen-capture thread streams the BlueStacks window into a perception layer that extracts the game state every step: elixir count (template-matched against digit cutouts), the four cards in hand (grayscale template matching, robust to the desaturated "not enough elixir" highlight), each tower's HP percentage (HSV health-bar fill ratio), end-of-match victory/defeat banners, and live troop positions from a fine-tuned YOLO detector. That perception dict feeds into a Gymnasium environment running at a 2 Hz step rate. The agent picks a (card-slot, placement-spot) tuple from a curated 8-spot action space; an action mask gated by elixir cost prevents illegal plays. After each match ends, the bot auto-queues the next one via the BlueStacks Play Again hotkey, and training runs continuously match-after-match until killed.
+This project builds an end-to-end pipeline that lets a `MaskablePPO` agent train on actual matches against live opponents. A 30 fps screen-capture thread streams the BlueStacks window into a perception layer that extracts the game state every step: elixir count (template-matched against digit cutouts), the four cards in hand (grayscale template matching to detect over the desaturated "not enough elixir" highlight), each tower's HP percentage (HSV health-bar fill ratio), end-of-match victory/defeat banners, and live troop positions from a fine-tuned YOLO detector. That perception dict feeds into a Gymnasium environment running at a 2 Hz step rate. The agent picks a (card-slot, placement-spot) tuple from a curated 8-spot action space; an action mask gated by elixir cost prevents illegal plays. After each match ends, the bot auto-queues the next one via the BlueStacks Play Again hotkey, and training runs continuously match-after-match until killed.
 
 ## Quick Start
 
@@ -43,7 +43,3 @@ The bot is evaluated on three axes:
 3. **Match outcomes** — per-episode reward (combination of tower HP delta + tower-destroyed events + terminal win/loss) is logged to tensorboard for every match. After ~20 minutes of training, the agent transitions from random play (~−0.5 mean reward) to placing affordable cards each step without burning elixir uselessly.
 
 Real strategic competence requires substantially more wall-clock training (training is bottlenecked at the live 2 Hz step rate of the actual game — ~170 K env steps per 24 h on a single BlueStacks instance), but the pipeline demonstrates that all components compose correctly.
-
-## Individual Contributions
-
-Solo project — all components (perception, action layer, environment, action masking, observation encoding, reward shaping, training loop, auto-queue, calibration tooling) implemented by one author with extensive AI assistance. See [ATTRIBUTION.md](ATTRIBUTION.md) for breakdown of AI-generated vs. human-modified code.

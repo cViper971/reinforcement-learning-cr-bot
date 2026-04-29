@@ -70,7 +70,3 @@ tensorboard --logdir models/runs
 ```
 
 Open http://localhost:6006 in a browser to see live training curves.
-
-## 6. External services
-
-This project does **not** call any external APIs. All inference (YOLO + PPO policy) runs locally.
