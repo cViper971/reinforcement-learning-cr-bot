@@ -4,12 +4,8 @@ import cv2
 import threading
 import time
 
-TARGET_MONITOR = 1
 TARGET_FPS = 30
 FRAME_INTERVAL = 1.0 / TARGET_FPS
-
-CROP_REGION = {'left': 655, 'top': 0, 'width': 608, 'height': 1080}
-
 
 class ScreenCapture:
     """Threaded screen capture — always provides the latest frame."""

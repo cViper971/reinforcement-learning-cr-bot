@@ -1,5 +1,4 @@
 import time
-
 import mss
 import pydirectinput
 
@@ -32,11 +31,29 @@ def tile_to_screen(col: int, row: int) -> tuple[int, int]:
     fy = _GRID_BL[1] - (row - 0.5) * _TILE_H
     return round(_MON_LEFT + _CROP_LEFT + fx), round(_MON_TOP + _CROP_TOP + fy)
 
-_CARD_SELECT_DELAY = 0.05  # s — let the game register the card-select before clicking the tile
-
+_CARD_SELECT_DELAY = 0.05
 
 def play_card(slot: int, col: int, row: int) -> None:
     sx, sy = tile_to_screen(col, row)
     pydirectinput.press(_CARD_KEYS[slot])
     time.sleep(_CARD_SELECT_DELAY)
     pydirectinput.click(sx, sy)
+
+def reset_match(get_state) -> None:
+    settle_seconds = 5.0
+    poll_dt = 0.25
+    flicker_grace= 3
+    zero_streak = 0
+    start = time.perf_counter()
+    while True:
+        gs = get_state()["game_state"]
+        if gs != 0:
+            zero_streak = 0
+            if time.perf_counter() - start >= settle_seconds:
+                pydirectinput.press('1')
+                return
+        else:
+            zero_streak += 1
+            if zero_streak >= flicker_grace:
+                return
+        time.sleep(poll_dt)
