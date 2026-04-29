@@ -46,7 +46,7 @@ _ENEMY_HP_LOW  = np.array([155, 100, 150], dtype=np.uint8)
 _ENEMY_HP_HIGH = np.array([180, 200, 255], dtype=np.uint8)
 
 # Load elixir digit templates (0-10)
-_TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), "..", "assets", "templates")
+_TEMPLATE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "data", "templates"))
 _ELIXIR_TEMPLATE_DIR = os.path.join(_TEMPLATE_DIR, "elixir")
 _ELIXIR_TEMPLATES: dict[int, np.ndarray] = {}
 

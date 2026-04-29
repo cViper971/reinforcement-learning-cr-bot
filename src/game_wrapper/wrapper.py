@@ -2,7 +2,8 @@
 import os
 import time
 
-DEFAULT_WEIGHTS = os.path.join(os.path.dirname(__file__), "..", "assets", "models", "best.pt")
+_REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+DEFAULT_WEIGHTS = os.path.join(_REPO_ROOT, "models", "best.pt")
 TARGET_MONITOR = 1
 CROP_REGION = {'left': 655, 'top': 0, 'width': 608, 'height': 1080}
 

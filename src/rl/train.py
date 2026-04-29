@@ -6,7 +6,7 @@ to checkpoints/.
 
 Usage:
     python -m rl.train --total-steps 50000
-    python -m rl.train --resume checkpoints/cr-mppo/last.zip
+    python -m rl.train --resume models/checkpoints/cr-mppo/last.zip
 """
 import argparse
 import os
@@ -40,9 +40,14 @@ def main():
     p.add_argument("--run-name", type=str, default="cr-mppo")
     args = p.parse_args()
 
-    runs_dir = os.path.join("runs", args.run_name)
-    ckpt_dir = os.path.join("checkpoints", args.run_name)
+    # Resolve to repo-root models/ regardless of cwd, so artifacts always
+    # land in the same place per the project layout (models/ is a
+    # rubric-required top-level dir).
+    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    runs_dir = os.path.join(repo_root, "models", "runs", args.run_name)
+    ckpt_dir = os.path.join(repo_root, "models", "checkpoints", args.run_name)
     os.makedirs(ckpt_dir, exist_ok=True)
+    os.makedirs(runs_dir, exist_ok=True)
 
     env = ClashRoyaleEnv()
 
