@@ -28,7 +28,9 @@ class KillSwitchCallback(BaseCallback):
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("--total-steps", type=int, default=2500)
+    # Default is effectively unbounded — training runs until Q is pressed.
+    # Override with --total-steps if you want a hard cap.
+    p.add_argument("--total-steps", type=int, default=10**9)
     p.add_argument("--n-steps", type=int, default=64)
     p.add_argument("--batch-size", type=int, default=16)
     p.add_argument("--lr", type=float, default=3e-4)
@@ -51,9 +53,18 @@ def main():
 
     env = ClashRoyaleEnv()
 
-    if args.resume:
-        print(f"[train] resuming from {args.resume}")
-        model = MaskablePPO.load(args.resume, env=env, tensorboard_log=runs_dir)
+    # Auto-resume from last.zip if present, so re-running the command always
+    # continues progressively. Pass --resume <path> to override, or delete
+    # last.zip to start fresh.
+    resume_path = args.resume
+    if resume_path is None:
+        candidate = os.path.join(ckpt_dir, "last.zip")
+        if os.path.exists(candidate):
+            resume_path = candidate
+
+    if resume_path:
+        print(f"[train] resuming from {resume_path}")
+        model = MaskablePPO.load(resume_path, env=env, tensorboard_log=runs_dir)
     else:
         model = MaskablePPO(
             "MlpPolicy",
@@ -76,7 +87,7 @@ def main():
 
     try:
         model.learn(total_timesteps=args.total_steps, callback=callbacks,
-                    reset_num_timesteps=(args.resume is None))
+                    reset_num_timesteps=(resume_path is None))
     finally:
         last_path = os.path.join(ckpt_dir, "last.zip")
         model.save(last_path)

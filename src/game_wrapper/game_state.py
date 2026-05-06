@@ -229,3 +229,53 @@ def extract_state(frame: np.ndarray, detector=None) -> dict:
             troops.append(troop_dict)
         state["troops"] = troops
     return state
+
+
+if __name__ == "__main__":
+    from .wrapper import GameWrapper
+    g = GameWrapper()
+    cv2.namedWindow("game_state — Q to quit", cv2.WINDOW_NORMAL)
+    try:
+        while True:
+            frame = g._cap.get_frame()
+            if frame is None:
+                cv2.waitKey(10)
+                continue
+            detections = g._detector.detect(frame)
+            state = extract_state(frame, detector=g._detector)
+            print(state)
+
+            vis = frame.copy()
+            x1, y1, x2, y2 = _ELIXIR_NUM_BOX
+            cv2.rectangle(vis, (x1, y1), (x2, y2), (255, 255, 0), 1)
+            cv2.putText(vis, f"elixir={state['elixir']}", (x1, y1 - 4),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 0), 1, cv2.LINE_AA)
+            for i, (x1, y1, x2, y2) in enumerate(_CARD_BOXES):
+                cv2.rectangle(vis, (x1, y1), (x2, y2), (0, 255, 255), 1)
+                cv2.putText(vis, state["hand"][i], (x1, y1 - 4),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 255, 255), 1, cv2.LINE_AA)
+            for name, (x1, y1, x2, y2) in _TOWER_BOXES.items():
+                color = (255, 100, 100) if name.startswith("my") else (100, 100, 255)
+                cv2.rectangle(vis, (x1, y1), (x2, y2), color, 1)
+                cv2.putText(vis, f"{state[name]}", (x1, y1 - 4),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 1, cv2.LINE_AA)
+            for name, (x1, y1, x2, y2) in _ENDGAME_BOXES.items():
+                cv2.rectangle(vis, (x1, y1), (x2, y2), (255, 255, 255), 1)
+            for d in detections:
+                color = (0, 255, 0) if d.team == "ally" else (0, 0, 255) if d.team == "enemy" else (200, 200, 200)
+                x1, y1, x2, y2 = d.bbox
+                cv2.rectangle(vis, (x1, y1), (x2, y2), color, 2)
+                cv2.putText(vis, d.name, (x1, y1 - 4),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 1, cv2.LINE_AA)
+            tag = {0: "RUNNING", 1: "WIN", -1: "LOSS"}.get(state["game_state"], "?")
+            cv2.putText(vis, tag, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.9,
+                        (255, 255, 255), 2, cv2.LINE_AA)
+            h, w = vis.shape[:2]
+            cv2.imshow("game_state — Q to quit",
+                       cv2.resize(vis, (int(w * 0.6), int(h * 0.6))))
+            k = cv2.waitKey(1) & 0xFF
+            if k in (ord('q'), ord('Q'), 27):
+                break
+    finally:
+        cv2.destroyAllWindows()
+        g.close()
