@@ -1,52 +1,59 @@
-# 👑 Clash Royale Autonomous RL Agent
+# Clash Royale Autonomous RL Agent
 
-An advanced, autonomous reinforcement-learning agent capable of playing the live mobile game **Clash Royale** in real time. By capturing raw pixels from a BlueStacks emulator and synthesizing simulated mouse and keyboard inputs, this agent learns and executes strategic plays against real human opponents.
+This project implements a reinforcement-learning (RL) agent that plays the live mobile game **Clash Royale** in real time. The agent operates entirely from pixel data, capturing the BlueStacks emulator window, parsing the game state through a custom computer vision pipeline, and executing actions via synthesized hardware-level inputs.
 
-## 🚀 The Vision
+## Architecture and Pipeline
 
-Finding a capable sparring partner or a reliable bot to practice against in Clash Royale has always been a challenge. This project bridges that gap by deploying a state-of-the-art reinforcement learning pipeline designed to learn from live gameplay. It acts as an always-available opponent, pushing the boundaries of what autonomous agents can achieve in fast-paced real-time strategy games.
+The system is designed as an end-to-end pipeline bridging real-time computer vision with deep reinforcement learning. It acts as a fully autonomous agent capable of continuous self-play and training against live opponents.
 
-## 🧠 System Architecture
+### High-Fidelity Perception Layer
 
-This project implements a sophisticated, end-to-end pipeline leveraging computer vision and deep reinforcement learning:
+The perception layer extracts a structured game state from the raw video feed at 30 FPS.
+- **Screen Capture**: A dedicated background thread utilizes `mss` to stream the emulator window with minimal latency.
+- **Game State Extraction**:
+  - **Elixir Tracking**: Implements OpenCV template matching against digit cutouts to monitor the continuous elixir pool.
+  - **Hand State**: Uses grayscale template matching to identify the four currently available cards, utilizing normalized cross-correlation to remain robust against the "not enough elixir" desaturation UI overlay.
+  - **Tower Health**: Applies HSV color space thresholding to isolate red and blue health bars, calculating fill ratios to determine continuous health percentages.
+  - **Spatial Troop Tracking**: Deploys a fine-tuned **YOLO** (Ultralytics) object detection model to actively locate, classify, and track the bounding boxes and team affiliation (ally/enemy) of troops on the battlefield.
 
-- **High-Fidelity Perception Layer**: A dedicated 30 FPS screen-capture thread continuously streams the emulator window. 
-- **Real-Time State Extraction**:
-  - **Elixir Tracking**: Precision template matching against digit cutouts.
-  - **Hand State**: Grayscale template matching detects the four available cards, dynamically handling "not enough elixir" desaturation UI states.
-  - **Tower Health**: HSV color thresholding accurately tracks red and blue health-bar fill ratios.
-  - **Spatial Troop Tracking**: A custom, fine-tuned **YOLO** object detection model actively locates and classifies troops on the battlefield in real-time.
-- **Gymnasium Environment & `MaskablePPO`**: The perception data feeds into a custom Gymnasium environment operating at an optimized 2 Hz step rate. The agent evaluates the board state and outputs a strategic `(card-slot, placement-spot)` tuple across a curated 8-spot action space.
-- **Dynamic Action Masking**: A sophisticated action mask dynamically validates plays against the current elixir pool and card availability, completely preventing illegal moves and ensuring optimal policy exploration. 
-- **Continuous Autonomous Training**: After a match concludes via end-game banner detection, the bot automatically queues into the next game, allowing for infinite, uninterrupted self-play and training loops.
+### Reinforcement Learning Environment
 
-## 🛠️ Quick Start
+The extracted state feeds into a custom Gymnasium environment operating at a fixed 2 Hz control rate.
+- **Observation Space**: The perception dictionary is encoded into a continuous 1D vector (Box space), capturing normalized elixir, tower health, one-hot encoded hand configurations, and spatial grids of active troops.
+- **Action Space**: Implements a `MultiDiscrete([5, 8])` space. This corresponds to 5 slot choices (4 cards + 1 No-Op) and 8 curated canonical placement coordinates (e.g., left/right bridge, center, princess towers), significantly reducing the action space complexity compared to a full coordinate grid.
+- **Dynamic Action Masking**: A deterministic action mask evaluates the agent's current hand and elixir pool. It zeroes out logits for unaffordable or unavailable cards, which is integrated directly into the `MaskablePPO` policy network to prevent invalid state transitions and accelerate exploration.
+- **Reward Shaping**: The reward function calculates dense per-step signals based on the delta in tower HP between the agent and the opponent, augmented by sparse terminal rewards for tower destruction events and match outcomes.
 
-Check out [SETUP.md](SETUP.md) for full system prerequisites (BlueStacks configuration, deck setup, monitor calibration). Once configured:
+### Autonomous Training Loop
+
+- **Policy Optimization**: The agent is trained using `MaskablePPO` (Proximal Policy Optimization with action masking) via `sb3-contrib`. 
+- **Continuous Execution**: Upon detecting end-game victory or defeat banners, the environment automatically synthesizes the required inputs to queue into the next match. This enables indefinite, uninterrupted rollouts and gradient updates.
+
+## Quick Start
+
+See [SETUP.md](SETUP.md) for full system prerequisites, including BlueStacks configuration, deck constraints, and monitor calibration. 
 
 ```bash
 # From the repository root
 pip install -r requirements.txt
 pip install -e .            # Registers rl and game_wrapper as packages
-python -m rl.train          # Initializes the training loop; press Q anywhere to stop
+python -m rl.train          # Initializes the training loop; press Q anywhere to terminate
 ```
 
-Resume training seamlessly from your latest checkpoint:
+To resume training from the most recent checkpoint:
 
 ```bash
 python -m rl.train --resume models/checkpoints/cr-mppo/last.zip
 ```
 
-## 🎥 Demonstrations
+## Video Documentation
 
-- **Gameplay Demo (3–5 min, non-technical):** [videos/demo.mp4](videos/demo.mp4)
-- **Technical Deep-Dive Walkthrough (5–10 min):** [videos/technical.mp4](videos/technical.mp4)
+- **Gameplay Demo:** [videos/demo.mp4](videos/demo.mp4)
+- **Technical Walkthrough:** [videos/technical.mp4](videos/technical.mp4)
 
-## 📊 Evaluation & Capabilities
+## Evaluation
 
-The architecture is built for stable, robust, and continuous learning:
+The architecture demonstrates robust foundations for real-time imperfect-information games:
 
-- **YOLO Vision Model**: The custom-trained YOLO troop detector demonstrates incredibly strong validation metrics, with high mAP and precision, consistently and accurately parsing complex and chaotic battlefield states.
-- **Strategic Policy Learning**: The `MaskablePPO` agent exhibits highly stable gradient updates with bounded KL divergence. The action masking system drastically accelerates learning by trimming invalid branches in the action space, allowing the agent's critic network to quickly begin modeling complex return landscapes and long-term strategy formulations. 
-
-This project establishes a powerful, highly-scalable foundation for applying deep reinforcement learning to complex, real-time, imperfect-information mobile games.
+- **Vision Model Performance**: The custom-trained YOLO troop detector achieves strong validation metrics on the hold-out set, enabling resilient parsing of chaotic battlefield states.
+- **Policy Convergence**: The `MaskablePPO` agent exhibits stable gradient updates characterized by bounded KL divergence. The integration of action masking heavily prunes the exploration tree, enabling the critic network to efficiently map the complex return landscapes of Clash Royale mechanics.
